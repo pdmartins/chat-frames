@@ -46,7 +46,8 @@ CHANGELOG_RELATIVE="CHANGELOG.md"
 DEFAULT_BUMP="minor"
 # No leading zeros: bash would read 08 as a broken octal number.
 VERSION_PATTERN='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
-GITHUB_HOST="github.com"
+# The three URL shapes of a GitHub remote; the second group is owner/repo.
+GITHUB_URL_REGEX='^(git@github\.com:|ssh://git@github\.com/|https://github\.com/)([^/]+/[^/]+)$'
 VISIBILITY_PRIVATE="PRIVATE"
 
 # ─── user-visible text ────────────────────────────────────────────────────────
@@ -115,8 +116,10 @@ REMOTE_URL=$(git remote get-url "$REMOTE" 2>/dev/null) || \
 # owner/repo, read from the remote rather than hardcoded, so renaming the
 # repository does not need an edit here. Empty when the remote is not GitHub.
 REMOTE_SLUG=""
-if [[ "$REMOTE_URL" == *"$GITHUB_HOST"* ]]; then
-  REMOTE_SLUG=$(echo "$REMOTE_URL" | sed -E 's#^git@[^:]+:##; s#^https?://[^/]+/##; s#\.git$##')
+REMOTE_URL_BARE="${REMOTE_URL%/}"
+REMOTE_URL_BARE="${REMOTE_URL_BARE%.git}"
+if [[ "$REMOTE_URL_BARE" =~ $GITHUB_URL_REGEX ]]; then
+  REMOTE_SLUG="${BASH_REMATCH[2]}"
 fi
 
 # True when main already exists here, or on the remote (a fresh clone has only
@@ -127,7 +130,8 @@ release_branch_exists() {
 }
 
 # ─── release gates ────────────────────────────────────────────────────────────
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD) || \
+  error "HEAD is detached. Check out $DEV_BRANCH (or the branch to release) first."
 [ "$CURRENT_BRANCH" = "$RELEASE_BRANCH" ] && \
   error "already on $RELEASE_BRANCH. Release from $DEV_BRANCH."
 
@@ -218,8 +222,10 @@ if $DRY_RUN; then
   dry "git push $REMOTE $RELEASE_BRANCH && git checkout $CURRENT_BRANCH"
   if [ -n "$REMOTE_SLUG" ] && command -v gh >/dev/null 2>&1; then
     dry "gh repo edit $REMOTE_SLUG --default-branch $RELEASE_BRANCH  (if it is not already), and warn if the repository is private"
+  elif [ -n "$REMOTE_SLUG" ]; then
+    dry "(no gh) tell you to set the default branch of $REMOTE_SLUG to $RELEASE_BRANCH by hand on GitHub"
   else
-    dry "(no gh or no GitHub remote) the default branch and visibility are left alone"
+    dry "(not a GitHub remote) the default branch and visibility are left alone"
   fi
   warn "Dry-run finished — nothing was executed."
   exit 0
@@ -227,7 +233,7 @@ fi
 
 if ! $ASSUME_YES; then
   printf "Merge %s into %s and push v%s? [y/N] " "$CURRENT_BRANCH" "$RELEASE_BRANCH" "$NEW_VERSION"
-  read -r reply
+  read -r reply || error "no answer on stdin, nothing was changed. Pass --yes to skip the confirmation."
   case "$reply" in [yY]*) ;; *) error "aborted." ;; esac
 fi
 
@@ -315,6 +321,8 @@ if [ -n "$REMOTE_SLUG" ] && command -v gh >/dev/null 2>&1; then
   if [ "$VISIBILITY" = "$VISIBILITY_PRIVATE" ]; then
     warn "the repository is PRIVATE — others cannot install it from the marketplace until you make it public"
   fi
+elif [ -n "$REMOTE_SLUG" ]; then
+  warn "'gh' is not installed: set the default branch of $REMOTE_SLUG to $RELEASE_BRANCH by hand on GitHub (Settings → Branches). The marketplace installs the default branch."
 fi
 
 echo ""
