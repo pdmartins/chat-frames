@@ -203,6 +203,11 @@ if $DRY_RUN; then
     dry "git checkout -b $RELEASE_BRANCH  (first release: $RELEASE_BRANCH starts at $CURRENT_BRANCH, so there is no merge commit)"
   fi
   dry "git push $REMOTE $RELEASE_BRANCH && git checkout $CURRENT_BRANCH"
+  if [ -n "$REMOTE_SLUG" ] && command -v gh >/dev/null 2>&1; then
+    dry "gh repo edit $REMOTE_SLUG --default-branch $RELEASE_BRANCH  (if it is not already), and warn if the repository is private"
+  else
+    dry "(no gh or no GitHub remote) the default branch and visibility are left alone"
+  fi
   warn "Dry-run finished — nothing was executed."
   exit 0
 fi
@@ -260,3 +265,33 @@ git push "$REMOTE" "$RELEASE_BRANCH"
 # after it may abort the script. The EXIT trap is the backstop if this fails.
 git checkout "$CURRENT_BRANCH" || warn "could not return to $CURRENT_BRANCH"
 success "v$NEW_VERSION is on $RELEASE_BRANCH"
+
+# ─── nothing below may abort: the release is already public ───────────────────
+# The marketplace entry has no ref, so it serves the repository's DEFAULT branch:
+# one still pointing at develop would hand users the development code — the exact
+# opposite of what this release just did.
+if [ -n "$REMOTE_SLUG" ] && command -v gh >/dev/null 2>&1; then
+  DEFAULT_BRANCH=$(gh repo view "$REMOTE_SLUG" --json defaultBranchRef \
+    --jq .defaultBranchRef.name 2>/dev/null || true)
+  if [ "$DEFAULT_BRANCH" != "$RELEASE_BRANCH" ]; then
+    info "GitHub default branch is '$DEFAULT_BRANCH' — switching it to $RELEASE_BRANCH..."
+    if gh repo edit "$REMOTE_SLUG" --default-branch "$RELEASE_BRANCH"; then
+      success "default branch is now $RELEASE_BRANCH"
+    else
+      warn "could not switch it — run: gh repo edit $REMOTE_SLUG --default-branch $RELEASE_BRANCH"
+    fi
+  fi
+  VISIBILITY=$(gh repo view "$REMOTE_SLUG" --json visibility --jq .visibility 2>/dev/null || true)
+  if [ "$VISIBILITY" = "$VISIBILITY_PRIVATE" ]; then
+    warn "the repository is PRIVATE — others cannot install it from the marketplace until you make it public"
+  fi
+fi
+
+echo ""
+success "Released v$NEW_VERSION"
+echo ""
+echo "  To get it, run (this script did not):"
+echo "    /plugin marketplace update $MARKETPLACE_NAME"
+echo "    claude plugin update $PLUGIN_NAME@$MARKETPLACE_NAME"
+echo ""
+echo "  Then open a NEW session: hooks load at session start."
