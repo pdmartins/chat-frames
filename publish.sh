@@ -30,9 +30,11 @@
 # when `command -v claude` finds nothing.
 #
 # A release merges into main and pushes it. That is not undoable from here, so
-# everything that can refuse — branch, clean tree, changelog, checks — refuses
-# BEFORE the first change, and nothing after the push is allowed to abort the
-# script.
+# everything that can refuse — branch, clean tree, whether the remote is ahead or
+# the merge would conflict, changelog, checks — refuses BEFORE the first change.
+# The only step after that which can still fail is the merge or the push; both
+# branches then go out in ONE atomic push, so a rejection publishes nothing, and
+# the script prints how to finish or undo. Nothing after the push may abort it.
 
 set -euo pipefail
 
@@ -129,6 +131,8 @@ release_branch_exists() {
     git show-ref --verify --quiet "refs/remotes/$REMOTE/$RELEASE_BRANCH"
 }
 
+ref_exists() { git show-ref --verify --quiet "refs/$1"; }
+
 # ─── release gates ────────────────────────────────────────────────────────────
 CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD) || \
   error "HEAD is detached. Check out $DEV_BRANCH (or the branch to release) first."
@@ -140,9 +144,36 @@ CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD) || \
 # a rejected push kills the script right there — leaving you on main, mid-merge,
 # without saying so. This trap runs on every exit, success or failure.
 ORIGINAL_BRANCH="$CURRENT_BRANCH"
+
+# The release changes local branches first and publishes both in ONE atomic push
+# at the end. While RELEASE_STARTED is true and RELEASE_PUSHED is not, nothing is
+# public, and a failure leaves local commits that the message below explains how
+# to finish or to undo.
+RELEASE_STARTED=false
+RELEASE_PUSHED=false
+START_SHA=""
+START_RELEASE_SHA=""
+
+explain_unpublished_release() {
+  warn "the release stopped before it was published: nothing reached $REMOTE (the push is atomic)."
+  warn "To finish: fix the cause above (resolve the merge, or git fetch and look at what $REMOTE has), then:"
+  warn "    git push --atomic $REMOTE $CURRENT_BRANCH $RELEASE_BRANCH"
+  warn "To undo:"
+  warn "    git merge --abort   # only if a merge is open"
+  warn "    git checkout $CURRENT_BRANCH && git reset --hard $START_SHA"
+  if [ -n "$START_RELEASE_SHA" ]; then
+    warn "    git branch -f $RELEASE_BRANCH $START_RELEASE_SHA"
+  else
+    warn "    git branch -D $RELEASE_BRANCH   # it did not exist here before this run"
+  fi
+}
+
 restore_branch() {
   local status=$?
   local current
+  if [ $status -ne 0 ] && $RELEASE_STARTED && ! $RELEASE_PUSHED; then
+    explain_unpublished_release
+  fi
   current=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
   { [ -z "$current" ] || [ "$current" = "$ORIGINAL_BRANCH" ]; } && return $status
   if [ -f "$(git rev-parse --git-dir 2>/dev/null)/MERGE_HEAD" ]; then
@@ -164,6 +195,32 @@ trap restore_branch EXIT
 # Untracked files count too: `git commit -am` would leave them out of the release.
 [ -z "$(git status --porcelain)" ] || \
   error "the working tree is not clean. Commit or stash your changes before releasing."
+
+# Everything the push or the merge could refuse is checked here, while nothing
+# has changed. Fetching only updates the remote-tracking refs.
+info "Fetching $REMOTE..."
+git fetch --quiet "$REMOTE" || error "'git fetch $REMOTE' failed — cannot tell whether the release would be accepted."
+
+if ref_exists "remotes/$REMOTE/$CURRENT_BRANCH" && \
+   ! git merge-base --is-ancestor "$REMOTE/$CURRENT_BRANCH" HEAD; then
+  error "$REMOTE/$CURRENT_BRANCH has commits that $CURRENT_BRANCH does not have. Pull or rebase first."
+fi
+
+# What the release merges into: the local main, else the remote one, else main
+# does not exist yet and the first release creates it.
+MERGE_TARGET=""
+if ref_exists "heads/$RELEASE_BRANCH"; then
+  MERGE_TARGET="$RELEASE_BRANCH"
+  if ref_exists "remotes/$REMOTE/$RELEASE_BRANCH" && \
+     ! git merge-base --is-ancestor "$REMOTE/$RELEASE_BRANCH" "$RELEASE_BRANCH"; then
+    error "local $RELEASE_BRANCH is behind $REMOTE/$RELEASE_BRANCH. Update it first (git checkout $RELEASE_BRANCH && git pull --ff-only)."
+  fi
+elif ref_exists "remotes/$REMOTE/$RELEASE_BRANCH"; then
+  MERGE_TARGET="$REMOTE/$RELEASE_BRANCH"
+fi
+if [ -n "$MERGE_TARGET" ] && ! git merge-tree --write-tree --quiet "$MERGE_TARGET" HEAD >/dev/null 2>&1; then
+  error "merging $CURRENT_BRANCH into $MERGE_TARGET would conflict. Bring $MERGE_TARGET into $CURRENT_BRANCH and resolve it there first."
+fi
 
 # The release notes are the one thing this script cannot compute, so they are
 # checked while the release can still be called off: once main is pushed, a
@@ -213,13 +270,13 @@ echo ""
 if $DRY_RUN; then
   dry "bump version $CURRENT_VERSION → $NEW_VERSION in $PLUGIN_JSON_RELATIVE"
   dry "move the '## Unreleased' notes of $CHANGELOG_RELATIVE under '## $NEW_VERSION — $RELEASE_DATE', empty '## Unreleased' on top"
-  dry "git commit -am 'release: v$NEW_VERSION' && git push $REMOTE $CURRENT_BRANCH"
+  dry "git commit -am 'release: v$NEW_VERSION'"
   if release_branch_exists; then
     dry "git checkout $RELEASE_BRANCH && git merge --no-ff $CURRENT_BRANCH -m 'release: v$NEW_VERSION'"
   else
     dry "git checkout -b $RELEASE_BRANCH  (first release: $RELEASE_BRANCH starts at $CURRENT_BRANCH, so there is no merge commit)"
   fi
-  dry "git push $REMOTE $RELEASE_BRANCH && git checkout $CURRENT_BRANCH"
+  dry "git push --atomic $REMOTE $CURRENT_BRANCH $RELEASE_BRANCH && git checkout $CURRENT_BRANCH"
   if [ -n "$REMOTE_SLUG" ] && command -v gh >/dev/null 2>&1; then
     dry "gh repo edit $REMOTE_SLUG --default-branch $RELEASE_BRANCH  (if it is not already), and warn if the repository is private"
   elif [ -n "$REMOTE_SLUG" ]; then
@@ -285,9 +342,11 @@ success "$PLUGIN_JSON_RELATIVE bumped to $NEW_VERSION, $CHANGELOG_RELATIVE secti
 claude plugin validate . --strict >/dev/null 2>&1 || \
   error "the bumped plugin does not validate — nothing was committed or pushed. Undo with: git checkout -- $PLUGIN_JSON_RELATIVE $CHANGELOG_RELATIVE"
 
+START_SHA=$(git rev-parse HEAD)
+START_RELEASE_SHA=$(git rev-parse --verify --quiet "refs/heads/$RELEASE_BRANCH" || true)
+RELEASE_STARTED=true
 git commit -q -am "release: v$NEW_VERSION"
-git push "$REMOTE" "$CURRENT_BRANCH"
-success "committed and pushed on $CURRENT_BRANCH"
+success "committed on $CURRENT_BRANCH"
 
 info "Merging $CURRENT_BRANCH → $RELEASE_BRANCH..."
 if release_branch_exists; then
@@ -296,7 +355,12 @@ if release_branch_exists; then
 else
   git checkout -b "$RELEASE_BRANCH"   # first release: main starts here
 fi
-git push "$REMOTE" "$RELEASE_BRANCH"
+
+# One atomic push: both branches are accepted or neither is, so a rejection
+# cannot leave develop published and main not.
+info "Pushing $CURRENT_BRANCH and $RELEASE_BRANCH..."
+git push --atomic "$REMOTE" "$CURRENT_BRANCH" "$RELEASE_BRANCH"
+RELEASE_PUSHED=true
 # Tolerant on purpose: the release is public from the line above, so nothing
 # after it may abort the script. The EXIT trap is the backstop if this fails.
 git checkout "$CURRENT_BRANCH" || warn "could not return to $CURRENT_BRANCH"
