@@ -16,8 +16,6 @@ By default prompts use a blue rule and replies a terracotta rule. The label can 
 | Model and effort, like `Opus 5.5 (high)` | no | yes |
 | Context tokens in use, and the change since the previous frame | yes | yes |
 
-Only the main conversation is framed. Subagent messages are not.
-
 ## Install
 
 ```
@@ -41,7 +39,7 @@ The file sits in the plugin's data folder, which survives plugin updates.
 Create the folder with:
 
 ```
-mkdir -p ~/.claude/plugins/data/chat-frames-pdmartins
+mkdir -p "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/data/chat-frames-pdmartins"
 ```
 
 Every field is optional. A field you leave out keeps its default.
@@ -70,7 +68,7 @@ This is the complete default. A file with exactly this content changes nothing.
 `show` turns parts of the label on or off:
 
 - `date` and `time`: the stamp. With both off, the time icon goes too.
-- `model`: the model name (assistant frames only).
+- `model`: the model name (assistant frames only). Off drops the effort too.
 - `effort`: the effort in parentheses after the model. Off drops the parentheses too.
 - `tokens`: the context tokens in use. Off drops the change next to it too.
 - `tokensDelta`: only the change in tokens since the previous frame, like `(+1.2k)`.
@@ -109,7 +107,8 @@ default. To hide a part, use `show`.
 - A file that is not valid JSON, or not a JSON object, keeps the whole default.
 - Either way you get one warning toast when the file is read. It names the file,
   each field and the reason. The same text goes to the debug log.
-- A missing file means the defaults, with no message.
+- A missing file means the defaults, with no toast. The debug log notes that
+  the defaults are in use.
 
 ### When an edit takes effect
 
