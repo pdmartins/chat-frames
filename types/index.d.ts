@@ -15,6 +15,35 @@ export type ChatFramesMark = {
 /** The marks of one session as `$.store` keeps them: row uuid to mark, oldest first. */
 export type ChatFramesSessionMarks = Record<string, ChatFramesMark>
 
+/** The names a config file may use for the color theme. */
+export type ChatFramesTheme = 'auto' | 'light' | 'dark'
+
+/** The colors of one theme: the rule and the background of each side of the conversation. */
+export type ChatFramesPalette = {
+  userRule: string
+  userBackground: string
+  assistantRule: string
+  assistantBackground: string
+}
+
+/** The settings of the plugin's config file, every field present (a missing one holds its default). */
+export type ChatFramesConfig = {
+  theme: ChatFramesTheme
+  /** Which parts of the label a rule shows. */
+  show: {
+    date: boolean
+    time: boolean
+    model: boolean
+    effort: boolean
+    tokens: boolean
+    tokensDelta: boolean
+  }
+  /** Date and time patterns: YYYY, YY, MM, DD, HH, mm and ss become numbers, other text stays. */
+  format: { date: string; time: string }
+  icons: { time: string; model: string; tokens: string }
+  colors: { dark: ChatFramesPalette; light: ChatFramesPalette }
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'chat-frames': {

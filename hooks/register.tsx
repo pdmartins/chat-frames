@@ -1,6 +1,7 @@
 import type { Register } from 'claude-code'
 
 import {
+  DEFAULT_CONFIG,
   FALLBACK_COLUMNS,
   buildAssistantRow,
   buildMarkedRule,
@@ -95,15 +96,17 @@ export const register: Register = on => {
     }
 
     const { value: mark } = await $.state.get({ ...MARKS, id: e.requestId })
+    const config = DEFAULT_CONFIG
+    const palette = config.colors.dark // this slice always draws the dark palette
     const columns = e.viewport?.columns ?? FALLBACK_COLUMNS
-    const topRule = buildMarkedRule(columns, mark)
+    const topRule = buildMarkedRule(columns, mark, config)
     const bottomRule = buildPlainRule(columns)
     const elements = $.ui.resolve(e)
 
     if (e.component === 'UserMessage') {
-      return buildUserRow(elements, { topRule, bottomRule, text: e.props.text })
+      return buildUserRow(elements, { topRule, bottomRule, text: e.props.text, palette })
     }
     const build = mark === undefined ? buildUnmarkedAssistantRow : buildAssistantRow
-    return build(elements, { topRule, bottomRule, engineRow: await next(e) })
+    return build(elements, { topRule, bottomRule, engineRow: await next(e), palette })
   })
 }

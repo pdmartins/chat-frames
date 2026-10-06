@@ -1,6 +1,6 @@
 import type { ElementTable, RenderElement } from 'claude-code'
 
-import type { ChatFramesMark } from '../types'
+import type { ChatFramesConfig, ChatFramesMark, ChatFramesPalette } from '../types'
 
 // ─── Display: colors, backgrounds, text, label and row layout ────────────────
 // Each framed row draws, top to bottom: a rule that carries the time the row
@@ -9,19 +9,27 @@ import type { ChatFramesMark } from '../types'
 // The user's prompt is drawn by this mod (prompt mark + text); an assistant
 // block is the engine's own drawing; with a mark its top rule is painted over the
 // engine's blank row 0, without one the top rule is a row of its own above it.
-// A row with no mark has a bare top rule (no label).
+// A row with no mark has a bare top rule (no label), and so has a row whose
+// label has no part left to show.
+// DEFAULT_CONFIG is every setting a config file may change, with its default: what
+// is drawn without a file. Parts of the label, icons, date and time patterns, colors.
 // The row trees (buildUserRow, buildAssistantRow, buildUnmarkedAssistantRow) are at the end of this region:
 // what is drawn where, its colors and its text change here and nowhere else.
-export const USER_COLOR = 'blue'
-export const USER_BACKGROUND = '#0f1b33' // very dark blue
-export const ASSISTANT_COLOR = 'claude' // Claude Code's terracotta theme key; raw fallback '#D77757'
-export const ASSISTANT_BACKGROUND = '#2b1811' // very dark terracotta
+// 'claude' is Claude Code's terracotta theme key; raw fallback '#D77757'.
+export const DEFAULT_CONFIG: ChatFramesConfig = {
+  theme: 'auto',
+  show: { date: true, time: true, model: true, effort: true, tokens: true, tokensDelta: true },
+  format: { date: 'DD/MM', time: 'HH:mm:ss' },
+  icons: { time: '🕐', model: '🤖', tokens: '📥' },
+  colors: {
+    dark: { userRule: 'blue', userBackground: '#0f1b33', assistantRule: 'claude', assistantBackground: '#2b1811' },
+    light: { userRule: 'blue', userBackground: '#e3ebf8', assistantRule: 'claude', assistantBackground: '#f8e6de' },
+  },
+}
 export const PROMPT_MARK = '❯ '
 export const FALLBACK_COLUMNS = 80
-const STAMP_ICON = '🕐'
-const MODEL_ICON = '🤖'
 const NO_EFFORT_TEXT = '--' // shown when no effort is known
-const TOKENS_ICON = '📥'
+const DATE_TIME_SEPARATOR = ' '
 const LABEL_SEPARATOR = ' · '
 const THOUSANDS_SUFFIX = 'k'
 const GROWTH_SIGN = '+'
@@ -38,20 +46,51 @@ const MODEL_ID_CONTEXT_SUFFIX = /\[[^\]]*\]$/
 const DIGITS_ONLY = /^\d+$/
 const VERSION_JOIN = '.'
 
-export const formatStamp = (ms: number): string => {
+// The pieces of a date or time pattern; each becomes a number. The longer YYYY is
+// tried before YY, and the match is case-sensitive (MM month, mm minute).
+const PATTERN_TOKENS = /YYYY|YY|MM|DD|HH|mm|ss/g
+const YEAR_DIGITS = 4
+const FIELD_DIGITS = 2
+const YEAR_MODULO = 100
+const PAD_CHAR = '0'
+const dateFields = (date: Date): Record<string, number> => ({
+  YYYY: date.getFullYear(),
+  YY: date.getFullYear() % YEAR_MODULO,
+  MM: date.getMonth() + 1,
+  DD: date.getDate(),
+  HH: date.getHours(),
+  mm: date.getMinutes(),
+  ss: date.getSeconds(),
+})
+
+export const formatPattern = (pattern: string, date: Date): string => {
+  const fields = dateFields(date)
+  return pattern.replace(PATTERN_TOKENS, token => {
+    const digits = token === 'YYYY' ? YEAR_DIGITS : FIELD_DIGITS
+    return String(fields[token]).padStart(digits, PAD_CHAR)
+  })
+}
+
+// Shape: `<icon> <date> <time>`; either one alone has no separator, and with
+// neither shown there is no stamp (and no icon).
+export const formatStamp = (ms: number, config: ChatFramesConfig = DEFAULT_CONFIG): string => {
   const date = new Date(ms)
-  const pad = (value: number) => String(value).padStart(2, '0')
-  const day = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}`
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-  return `${STAMP_ICON} ${day} ${time}`
+  const parts: string[] = []
+  if (config.show.date) {
+    parts.push(formatPattern(config.format.date, date))
+  }
+  if (config.show.time) {
+    parts.push(formatPattern(config.format.time, date))
+  }
+  return parts.length === 0 ? '' : `${config.icons.time} ${parts.join(DATE_TIME_SEPARATOR)}`
 }
 
 const formatTokenCount = (tokens: number): string =>
   tokens < ONE_THOUSAND ? `${tokens}` : `${(tokens / ONE_THOUSAND).toFixed(1)}${THOUSANDS_SUFFIX}`
 
-export const formatTokens = (tokens: number, delta: number | undefined): string => {
-  const total = `${TOKENS_ICON} ${formatTokenCount(tokens)}`
-  if (delta === undefined || delta === 0) {
+export const formatTokens = (tokens: number, delta: number | undefined, config: ChatFramesConfig): string => {
+  const total = `${config.icons.tokens} ${formatTokenCount(tokens)}`
+  if (!config.show.tokensDelta || delta === undefined || delta === 0) {
     return total
   }
   const sign = delta < 0 ? SHRINK_SIGN : GROWTH_SIGN
@@ -70,28 +109,35 @@ export const formatModelName = (modelId: string): string => {
   return `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join(VERSION_JOIN)}`
 }
 
-// Shape: `🤖 <model> (<effort>)`.
-export const formatModel = (modelId: string, effort: string | null): string =>
-  `${MODEL_ICON} ${formatModelName(modelId)} (${effort ?? NO_EFFORT_TEXT})`
+// Shape: `🤖 <model> (<effort>)`, without the parentheses when the effort is not shown.
+export const formatModel = (modelId: string, effort: string | null, config: ChatFramesConfig): string => {
+  const model = `${config.icons.model} ${formatModelName(modelId)}`
+  return config.show.effort ? `${model} (${effort ?? NO_EFFORT_TEXT})` : model
+}
 
 // Label order: time, model and effort (assistant rows only), context tokens and
-// their change since the previous framed row. A part with no value, and a zero
-// change, are left out.
-export const formatMark = (mark: ChatFramesMark): string => {
-  const parts = [formatStamp(mark.at)]
-  if (mark.model !== undefined) {
-    parts.push(formatModel(mark.model, mark.effort ?? null))
+// their change since the previous framed row. A part with no value, a part the
+// config hides, and a zero change are left out; with nothing left the label is empty.
+export const formatMark = (mark: ChatFramesMark, config: ChatFramesConfig = DEFAULT_CONFIG): string => {
+  const parts = [formatStamp(mark.at, config)].filter(stamp => stamp !== '')
+  if (config.show.model && mark.model !== undefined) {
+    parts.push(formatModel(mark.model, mark.effort ?? null, config))
   }
-  if (mark.contextTokens !== null) {
-    parts.push(formatTokens(mark.contextTokens, mark.contextDelta))
+  if (config.show.tokens && mark.contextTokens !== null) {
+    parts.push(formatTokens(mark.contextTokens, mark.contextDelta, config))
   }
   return parts.join(LABEL_SEPARATOR)
 }
 
 export const buildPlainRule = (columns: number): string => RULE_GLYPH.repeat(columns)
 
-export const buildMarkedRule = (columns: number, mark: ChatFramesMark | undefined): string => {
-  const label = mark === undefined ? '' : ` ${formatMark(mark)} `
+export const buildMarkedRule = (
+  columns: number,
+  mark: ChatFramesMark | undefined,
+  config: ChatFramesConfig = DEFAULT_CONFIG,
+): string => {
+  const text = mark === undefined ? '' : formatMark(mark, config)
+  const label = text === '' ? '' : ` ${text} `
   const lead = RULE_GLYPH.repeat(LEADING_RULE_LENGTH)
   const tail = RULE_GLYPH.repeat(Math.max(0, columns - lead.length - label.length))
   return lead + label + tail
@@ -100,21 +146,29 @@ export const buildMarkedRule = (columns: number, mark: ChatFramesMark | undefine
 /** The surface's own Box and Text, from `$.ui.resolve(e)`. */
 export type FrameElements = Pick<ElementTable, 'Box' | 'Text'>
 
-export type UserRowParts = { topRule: string; bottomRule: string; text: string }
-export type AssistantRowParts = { topRule: string; bottomRule: string; engineRow: RenderElement }
+export type UserRowParts = { topRule: string; bottomRule: string; text: string; palette: ChatFramesPalette }
+export type AssistantRowParts = {
+  topRule: string
+  bottomRule: string
+  engineRow: RenderElement
+  palette: ChatFramesPalette
+}
 
 // The engine paints its own grey background behind the prompt, which covers any
 // background drawn around it, so the prompt row is drawn here instead.
-export const buildUserRow = ({ Box, Text }: FrameElements, { topRule, bottomRule, text }: UserRowParts): RenderElement => (
+export const buildUserRow = (
+  { Box, Text }: FrameElements,
+  { topRule, bottomRule, text, palette }: UserRowParts,
+): RenderElement => (
   <Box flexDirection="column">
-    <Text color={USER_COLOR} wrap="truncate">
+    <Text color={palette.userRule} wrap="truncate">
       {topRule}
     </Text>
-    <Box flexDirection="row" backgroundColor={USER_BACKGROUND}>
-      <Text backgroundColor={USER_BACKGROUND}>{PROMPT_MARK}</Text>
-      <Text backgroundColor={USER_BACKGROUND}>{text}</Text>
+    <Box flexDirection="row" backgroundColor={palette.userBackground}>
+      <Text backgroundColor={palette.userBackground}>{PROMPT_MARK}</Text>
+      <Text backgroundColor={palette.userBackground}>{text}</Text>
     </Box>
-    <Text color={USER_COLOR} wrap="truncate">
+    <Text color={palette.userRule} wrap="truncate">
       {bottomRule}
     </Text>
   </Box>
@@ -124,18 +178,18 @@ export const buildUserRow = ({ Box, Text }: FrameElements, { topRule, bottomRule
 // rule is painted over that line so no gap is left between the rule and the message.
 export const buildAssistantRow = (
   { Box, Text }: FrameElements,
-  { topRule, bottomRule, engineRow }: AssistantRowParts,
+  { topRule, bottomRule, engineRow, palette }: AssistantRowParts,
 ): RenderElement => (
   <Box flexDirection="column">
-    <Box flexDirection="column" backgroundColor={ASSISTANT_BACKGROUND}>
+    <Box flexDirection="column" backgroundColor={palette.assistantBackground}>
       {engineRow}
       <Box position="absolute" top={0} left={0}>
-        <Text color={ASSISTANT_COLOR} wrap="truncate">
+        <Text color={palette.assistantRule} wrap="truncate">
           {topRule}
         </Text>
       </Box>
     </Box>
-    <Text color={ASSISTANT_COLOR} wrap="truncate">
+    <Text color={palette.assistantRule} wrap="truncate">
       {bottomRule}
     </Text>
   </Box>
@@ -145,16 +199,16 @@ export const buildAssistantRow = (
 // known (API-error rows do not), so the top rule is a row of its own above it.
 export const buildUnmarkedAssistantRow = (
   { Box, Text }: FrameElements,
-  { topRule, bottomRule, engineRow }: AssistantRowParts,
+  { topRule, bottomRule, engineRow, palette }: AssistantRowParts,
 ): RenderElement => (
   <Box flexDirection="column">
-    <Text color={ASSISTANT_COLOR} wrap="truncate">
+    <Text color={palette.assistantRule} wrap="truncate">
       {topRule}
     </Text>
-    <Box flexDirection="column" backgroundColor={ASSISTANT_BACKGROUND}>
+    <Box flexDirection="column" backgroundColor={palette.assistantBackground}>
       {engineRow}
     </Box>
-    <Text color={ASSISTANT_COLOR} wrap="truncate">
+    <Text color={palette.assistantRule} wrap="truncate">
       {bottomRule}
     </Text>
   </Box>

@@ -2,16 +2,14 @@ import { expect, test } from 'claude-code/testing'
 
 import type { On } from 'claude-code'
 
-import type { ChatFramesMark } from '../types'
+import type { ChatFramesConfig, ChatFramesMark } from '../types'
 import {
-  ASSISTANT_BACKGROUND,
-  ASSISTANT_COLOR,
+  DEFAULT_CONFIG,
   PROMPT_MARK,
-  USER_BACKGROUND,
-  USER_COLOR,
   buildMarkedRule,
   formatMark,
   formatModelName,
+  formatPattern,
   formatStamp,
 } from '../hooks/display'
 import {
@@ -28,6 +26,8 @@ import {
 } from '../hooks/marks'
 import type { AppendedRow, MarkStore } from '../hooks/marks'
 
+const { userRule: USER_COLOR, userBackground: USER_BACKGROUND, assistantRule: ASSISTANT_COLOR, assistantBackground: ASSISTANT_BACKGROUND } =
+  DEFAULT_CONFIG.colors.dark
 const PLUGIN = 'chat-frames'
 const SURFACE = 'terminal'
 const COLUMNS = 30
@@ -56,6 +56,18 @@ const holdMark = (on: On, mark: ChatFramesMark) =>
       ? { value: { value: mark, version: 1 } }
       : { value: { value: undefined, version: 0 } },
   )
+
+// The default config with some fields changed, one level down.
+const configWith = (changes: {
+  show?: Partial<ChatFramesConfig['show']>
+  format?: Partial<ChatFramesConfig['format']>
+  icons?: Partial<ChatFramesConfig['icons']>
+}): ChatFramesConfig => ({
+  ...DEFAULT_CONFIG,
+  show: { ...DEFAULT_CONFIG.show, ...changes.show },
+  format: { ...DEFAULT_CONFIG.format, ...changes.format },
+  icons: { ...DEFAULT_CONFIG.icons, ...changes.icons },
+})
 
 const row = (overrides: Partial<AppendedRow> = {}): AppendedRow => ({
   door: 'response',
@@ -504,4 +516,69 @@ test('a store that cannot be read is reported and the session starts with no mar
   expect(await restoreSessionMarks(failing, text => logged.push(text), 's1')).toEqual({})
   expect(logged.length).toBe(1)
   expect(logged[0]).toContain('store unreadable')
+})
+
+test('with no config the label is the default one', () => {
+  expect(formatMark(MODEL_MARK, DEFAULT_CONFIG)).toBe('🕐 05/10 19:54:07 · 🤖 Opus 5.5 (xhigh) · 📥 252.8k (+22.3k)')
+})
+
+test('each show flag set to false drops its part of the label', () => {
+  const label = (show: Partial<ChatFramesConfig['show']>) => formatMark(MODEL_MARK, configWith({ show }))
+  expect(label({ date: false })).toBe('🕐 19:54:07 · 🤖 Opus 5.5 (xhigh) · 📥 252.8k (+22.3k)')
+  expect(label({ time: false })).toBe('🕐 05/10 · 🤖 Opus 5.5 (xhigh) · 📥 252.8k (+22.3k)')
+  expect(label({ model: false })).toBe('🕐 05/10 19:54:07 · 📥 252.8k (+22.3k)')
+  expect(label({ effort: false })).toBe('🕐 05/10 19:54:07 · 🤖 Opus 5.5 · 📥 252.8k (+22.3k)')
+  expect(label({ tokensDelta: false })).toBe('🕐 05/10 19:54:07 · 🤖 Opus 5.5 (xhigh) · 📥 252.8k')
+  expect(label({ tokens: false })).toBe('🕐 05/10 19:54:07 · 🤖 Opus 5.5 (xhigh)')
+  expect(label({ tokens: false, tokensDelta: true })).toBe('🕐 05/10 19:54:07 · 🤖 Opus 5.5 (xhigh)')
+})
+
+test('with date and time both off the time icon goes too', () => {
+  const label = formatMark(MODEL_MARK, configWith({ show: { date: false, time: false } }))
+  expect(label).toBe('🤖 Opus 5.5 (xhigh) · 📥 252.8k (+22.3k)')
+  expect(label.includes('🕐')).toBe(false)
+})
+
+test('with every part off the label is empty and the rule is bare', () => {
+  const off = { date: false, time: false, model: false, effort: false, tokens: false, tokensDelta: false }
+  const config = configWith({ show: off })
+  expect(formatMark(MODEL_MARK, config)).toBe('')
+  expect(buildMarkedRule(COLUMNS, MODEL_MARK, config)).toBe('─'.repeat(COLUMNS))
+})
+
+test('the icons of the label come from the config', () => {
+  const icons = { time: '⏰', model: '🧠', tokens: '🔢' }
+  expect(formatMark(MODEL_MARK, configWith({ icons }))).toBe('⏰ 05/10 19:54:07 · 🧠 Opus 5.5 (xhigh) · 🔢 252.8k (+22.3k)')
+})
+
+test('the tokens of a mark with no model and no effort follow the same flags', () => {
+  expect(formatMark(MARK, configWith({ show: { tokensDelta: false } }))).toBe('🕐 05/10 19:54:07 · 📥 252.8k')
+})
+
+test('a date or time pattern turns YYYY, YY, MM, DD, HH, mm and ss into numbers and keeps the rest', () => {
+  const date = new Date(2026, 0, 5, 9, 4, 7)
+  expect(formatPattern('DD/MM', date)).toBe('05/01')
+  expect(formatPattern('HH:mm:ss', date)).toBe('09:04:07')
+  expect(formatPattern('YYYY-MM-DD', date)).toBe('2026-01-05')
+  expect(formatPattern('MM/DD', date)).toBe('01/05')
+  expect(formatPattern('YY', date)).toBe('26')
+  expect(formatPattern('HH:mm', date)).toBe('09:04')
+  expect(formatPattern('[DD] of MM, at HH h', date)).toBe('[05] of 01, at 09 h')
+  expect(formatPattern('no tokens', date)).toBe('no tokens')
+})
+
+test('a pattern is case-sensitive: MM is the month and mm the minute', () => {
+  const date = new Date(2026, 10, 5, 9, 4, 7)
+  expect(formatPattern('MM mm', date)).toBe('11 04')
+  expect(formatPattern('dd yyyy hh SS', date)).toBe('dd yyyy hh SS')
+})
+
+test('the stamp follows the patterns of the config', () => {
+  const format = { date: 'YYYY-MM-DD', time: 'HH:mm' }
+  expect(formatStamp(LOCAL_STAMP, configWith({ format }))).toBe('🕐 2026-10-05 19:54')
+})
+
+test('a date or a time shown alone has no stray separator', () => {
+  expect(formatStamp(LOCAL_STAMP, configWith({ show: { time: false } }))).toBe('🕐 05/10')
+  expect(formatStamp(LOCAL_STAMP, configWith({ show: { date: false } }))).toBe('🕐 19:54:07')
 })
