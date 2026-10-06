@@ -11,8 +11,9 @@
 # This script refuses to release an empty `## Unreleased`.
 #
 # WHERE USERS GET IT. The marketplace `pdmartins` lives in another repository
-# and points at this one by its GitHub source, with no ref and no version, so it
-# serves the default branch. This script makes main that default branch. It
+# and points at this one by a `git-subdir` source with `path: plugin` (the
+# plugin lives in plugin/, the repo-level files stay at the root), with no ref
+# and no version, so it serves the default branch. This script makes main that default branch. It
 # never touches the other repository and never touches this machine's install.
 #
 # Usage:
@@ -43,7 +44,8 @@ RELEASE_BRANCH="main"
 DEV_BRANCH="develop"
 REMOTE="origin"
 MARKETPLACE_NAME="pdmartins"
-PLUGIN_JSON_RELATIVE=".claude-plugin/plugin.json"
+PLUGIN_DIR_RELATIVE="plugin"
+PLUGIN_JSON_RELATIVE="$PLUGIN_DIR_RELATIVE/.claude-plugin/plugin.json"
 CHANGELOG_RELATIVE="CHANGELOG.md"
 DEFAULT_BUMP="minor"
 # No leading zeros: bash would read 08 as a broken octal number.
@@ -86,6 +88,7 @@ done
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$REPO_DIR"
 
+PLUGIN_DIR="$REPO_DIR/$PLUGIN_DIR_RELATIVE"
 PLUGIN_JSON="$REPO_DIR/$PLUGIN_JSON_RELATIVE"
 CHANGELOG_MD="$REPO_DIR/$CHANGELOG_RELATIVE"
 
@@ -247,15 +250,15 @@ PYEOF
   error "$CHANGELOG_RELATIVE: $CHANGELOG_PROBLEM — write what this release changes under that heading first; the release moves it under the new version."
 
 info "Running the plugin tests..."
-TEST_OUT=$(claude plugin test . 2>&1) || {
+TEST_OUT=$(claude plugin test "$PLUGIN_DIR" 2>&1) || {
   echo "$TEST_OUT" | tail -25
-  error "'claude plugin test .' failed — release aborted."
+  error "'claude plugin test $PLUGIN_DIR' failed — release aborted."
 }
 success "tests OK ($(echo "$TEST_OUT" | grep -E '^Ran ' | tail -1))"
 
 info "Validating the plugin..."
-claude plugin validate . --strict >/dev/null 2>&1 || \
-  error "'claude plugin validate . --strict' failed — release aborted."
+claude plugin validate "$PLUGIN_DIR" --strict >/dev/null 2>&1 || \
+  error "'claude plugin validate $PLUGIN_DIR --strict' failed — release aborted."
 success "plugin validates"
 
 # ─── compute the new version ──────────────────────────────────────────────────
@@ -346,7 +349,7 @@ with io.open(changelog, "w", encoding="utf-8") as handle:
 PYEOF
 success "$PLUGIN_JSON_RELATIVE bumped to $NEW_VERSION, $CHANGELOG_RELATIVE section moved"
 
-claude plugin validate . --strict >/dev/null 2>&1 || \
+claude plugin validate "$PLUGIN_DIR" --strict >/dev/null 2>&1 || \
   error "the bumped plugin does not validate — nothing was committed or pushed. Undo with: git checkout -- $PLUGIN_JSON_RELATIVE $CHANGELOG_RELATIVE"
 
 START_SHA=$(git rev-parse HEAD)
