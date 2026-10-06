@@ -13,6 +13,7 @@ import type { ChatFramesConfig, ChatFramesMark, ChatFramesPalette } from '../typ
 // label has no part left to show.
 // DEFAULT_CONFIG is every setting a config file may change, with its default: what
 // is drawn without a file. Parts of the label, icons, date and time patterns, colors.
+// The wording of the toast and of the debug log about a config file is in this region too.
 // The row trees (buildUserRow, buildAssistantRow, buildUnmarkedAssistantRow) are at the end of this region:
 // what is drawn where, its colors and its text change here and nowhere else.
 // 'claude' is Claude Code's terracotta theme key; raw fallback '#D77757'.
@@ -28,6 +29,23 @@ export const DEFAULT_CONFIG: ChatFramesConfig = {
 }
 export const PROMPT_MARK = '❯ '
 export const FALLBACK_COLUMNS = 80
+
+// What the toast and the debug log say about the config file.
+export const FILE_FIELD = 'file'
+export const TOAST_PREFIX = 'chat-frames: config problems in'
+export const PROBLEM_SEPARATOR = '; '
+export const READ_LOG_TEMPLATE = (path: string) => `config: reading ${path}`
+export const MISSING_LOG_TEMPLATE = (path: string) => `config: ${path} does not exist, defaults in use`
+export const NO_PATH_LOG = 'config: the config directory is unknown (HOME and CLAUDE_CONFIG_DIR are unset), defaults in use'
+export const REASON_NOT_JSON = (message: string) => `not valid JSON (${message}), all defaults in use`
+export const REASON_NOT_OBJECT = 'must be a JSON object, all defaults in use'
+export const REASON_READ_FAILED = (message: string) => `could not be read (${message}), all defaults in use`
+export const REASON_UNKNOWN_KEY = 'unknown key, ignored'
+export const REASON_NOT_OBJECT_FIELD = 'must be an object, default in use'
+export const REASON_NOT_BOOLEAN = 'must be true or false, default in use'
+export const REASON_NOT_TEXT = 'must be a non-empty string, default in use'
+export const REASON_NOT_ALLOWED = (allowed: readonly string[]) => `must be one of ${allowed.join(', ')}, default in use`
+
 const NO_EFFORT_TEXT = '--' // shown when no effort is known
 const DATE_TIME_SEPARATOR = ' '
 const LABEL_SEPARATOR = ' · '

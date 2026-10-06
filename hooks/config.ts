@@ -1,4 +1,20 @@
-import { DEFAULT_CONFIG } from './display'
+import {
+  DEFAULT_CONFIG,
+  FILE_FIELD,
+  MISSING_LOG_TEMPLATE,
+  NO_PATH_LOG,
+  PROBLEM_SEPARATOR,
+  READ_LOG_TEMPLATE,
+  REASON_NOT_BOOLEAN,
+  REASON_NOT_ALLOWED,
+  REASON_NOT_JSON,
+  REASON_NOT_OBJECT,
+  REASON_NOT_OBJECT_FIELD,
+  REASON_NOT_TEXT,
+  REASON_READ_FAILED,
+  REASON_UNKNOWN_KEY,
+  TOAST_PREFIX,
+} from './display'
 import type { ChatFramesConfig } from '../types'
 
 // ─── Config file: where it is, how it is read and checked ────────────────────
@@ -16,22 +32,6 @@ const FIELD_SEPARATOR = '.'
 const ALLOWED_THEMES = ['auto', 'light', 'dark']
 // The values a string field may take, by field; a string field not listed takes any non-empty text.
 const ALLOWED_VALUES: Readonly<Record<string, readonly string[]>> = { theme: ALLOWED_THEMES }
-
-// What the reader of the toast and of the log sees.
-const FILE_FIELD = 'file'
-const TOAST_PREFIX = 'chat-frames: config problems in'
-const PROBLEM_SEPARATOR = '; '
-const READ_LOG_TEMPLATE = (path: string) => `config: reading ${path}`
-const MISSING_LOG_TEMPLATE = (path: string) => `config: ${path} does not exist, defaults in use`
-const NO_PATH_LOG = 'config: the config directory is unknown (HOME and CLAUDE_CONFIG_DIR are unset), defaults in use'
-const REASON_NOT_JSON = (message: string) => `not valid JSON (${message}), all defaults in use`
-const REASON_NOT_OBJECT = 'must be a JSON object, all defaults in use'
-const REASON_READ_FAILED = (message: string) => `could not be read (${message}), all defaults in use`
-const REASON_UNKNOWN_KEY = 'unknown key, ignored'
-const REASON_NOT_OBJECT_FIELD = 'must be an object, default in use'
-const REASON_NOT_BOOLEAN = 'must be true or false, default in use'
-const REASON_NOT_TEXT = 'must be a non-empty string, default in use'
-const REASON_NOT_ALLOWED = (allowed: readonly string[]) => `must be one of ${allowed.join(', ')}, default in use`
 
 export type ConfigProblem = { field: string; reason: string }
 export type ParsedConfig = { config: ChatFramesConfig; problems: ConfigProblem[] }

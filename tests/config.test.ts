@@ -195,3 +195,27 @@ test('session.start reads the config file of the plugin and reports its problems
   expect(toasts[0]).toContain('theme')
   expect(logs.some(line => line.includes(DEV_PATH))).toBe(true)
 })
+
+test('the colors read at session.start are the ones the rows are drawn with', async ($, on) => {
+  mock.env(on, { HOME })
+  mock.store(on)
+  answerFile(on, '{"colors":{"dark":{"userRule":"red"}}}')
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.log', () => ({ value: undefined }))
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.start', (_$, { cwd }) => ({ cwd }))
+  await $.session.start({ cwd: HOME, surface: null, isInteractive: false })
+  const ui = await $.ui.mount({
+    plugin: 'chat-frames',
+    surface: 'terminal',
+    component: 'UserMessage',
+    requestId: 'row',
+    props: { text: 'hello', origin: { kind: 'composer' }, isExpanded: false },
+    viewport: { columns: 30, rows: 10 },
+  })
+  const rules = await ui.findAll({ type: 'Text', text: /^─/ })
+  expect(rules.length).toBe(2)
+  expect(rules.every(rule => rule.props.color === 'red')).toBe(true)
+  await ui.unmount()
+})
