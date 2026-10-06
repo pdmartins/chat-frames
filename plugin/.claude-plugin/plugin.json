@@ -1,7 +1,7 @@
 {
   "name": "chat-frames",
   "version": "0.2.0",
-  "description": "Frames each user prompt (blue) and assistant reply block (terracotta) in the transcript with a timestamped top rule, a closing rule and a dark tinted background.",
+  "description": "Frames each user prompt (blue) and assistant reply (terracotta) in the transcript with a labeled top rule, a closing rule and a tinted background for light or dark themes. Configurable through a JSON file.",
   "author": { "name": "Pedro Martins", "url": "https://github.com/pdmartins" },
   "license": "MIT",
   "repository": "https://github.com/pdmartins/chat-frames",
