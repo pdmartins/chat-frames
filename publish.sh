@@ -44,12 +44,13 @@ MARKETPLACE_NAME="pdmartins"
 PLUGIN_JSON_RELATIVE=".claude-plugin/plugin.json"
 CHANGELOG_RELATIVE="CHANGELOG.md"
 DEFAULT_BUMP="minor"
-VERSION_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+$'
+# No leading zeros: bash would read 08 as a broken octal number.
+VERSION_PATTERN='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 GITHUB_HOST="github.com"
 VISIBILITY_PRIVATE="PRIVATE"
 
 # ─── user-visible text ────────────────────────────────────────────────────────
-TAG="chat-frames"
+TAG="publish"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 ICON_OK="✅"
 ICON_WARN="⚠️ "
@@ -89,7 +90,19 @@ command -v claude >/dev/null 2>&1 || \
   error "'claude' is not on the PATH of this shell — the plugin checks need it (see the header of this script)."
 command -v python3 >/dev/null 2>&1 || error "'python3' is not on the PATH."
 
-read_json() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2"; }
+# Prints one top-level field of a JSON file; a clear message, not a traceback,
+# when the file is missing, is not JSON, or lacks the field.
+read_json() {
+  python3 - "$1" "$2" <<'PYEOF'
+import json, sys
+path, key = sys.argv[1:3]
+try:
+    with open(path, encoding="utf-8") as handle:
+        print(json.load(handle)[key])
+except (OSError, ValueError, KeyError, TypeError) as problem:
+    sys.exit("cannot read '%s' from %s: %s: %s" % (key, path, type(problem).__name__, problem))
+PYEOF
+}
 
 PLUGIN_NAME=$(read_json "$PLUGIN_JSON" name)
 CURRENT_VERSION=$(read_json "$PLUGIN_JSON" version)
@@ -221,15 +234,32 @@ fi
 # ─── bump, commit, merge, push ────────────────────────────────────────────────
 # Only the version value is replaced, so the rest of plugin.json keeps its layout.
 python3 - "$PLUGIN_JSON" "$CHANGELOG_MD" "$NEW_VERSION" "$RELEASE_DATE" <<'PYEOF'
-import io, re, sys
+import io, json, re, sys
 
 plugin_json, changelog, version, date = sys.argv[1:5]
 
 with io.open(plugin_json, encoding="utf-8") as handle:
     text = handle.read()
-text, bumped = re.subn(r'("version"\s*:\s*")[^"]*(")', r"\g<1>%s\g<2>" % version, text, count=1)
-if not bumped:
-    raise SystemExit("no \"version\" field found in " + plugin_json)
+
+# Walk the strings and brackets to find the "version" key at depth 1: a nested
+# object may carry a "version" of its own that must stay as it is.
+TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|[{}\[\]]')
+VALUE = re.compile(r'\s*:\s*("(?:[^"\\]|\\.)*")')
+depth = 0
+span = None
+for token in TOKEN.finditer(text):
+    if token.group() in ("{", "["):
+        depth += 1
+    elif token.group() in ("}", "]"):
+        depth -= 1
+    elif depth == 1 and token.group() == '"version"':
+        value = VALUE.match(text, token.end())
+        if value:
+            span = value.span(1)
+            break
+if span is None:
+    raise SystemExit("no top-level \"version\" field found in " + plugin_json)
+text = text[:span[0]] + json.dumps(version) + text[span[1]:]
 with io.open(plugin_json, "w", encoding="utf-8") as handle:
     handle.write(text)
 
