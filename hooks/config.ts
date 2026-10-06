@@ -13,9 +13,10 @@ import {
   REASON_NOT_TEXT,
   REASON_READ_FAILED,
   REASON_UNKNOWN_KEY,
+  THEME_READ_FAILED_LOG,
   TOAST_PREFIX,
 } from './display'
-import type { ChatFramesConfig } from '../types'
+import type { ChatFramesConfig, ChatFramesPalette } from '../types'
 
 // ─── Config file: where it is, how it is read and checked ────────────────────
 // The file is `config.json` in the plugin's data folder. Every field is optional:
@@ -174,5 +175,43 @@ export const loadConfig = async (path: string | undefined, io: ConfigIo): Promis
     io.log(report)
   }
   return parsed.config
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Palette: which colors the rows are drawn with ───────────────────────────
+// The file's `theme` decides: `light` and `dark` force a palette; `auto` follows
+// Claude Code's own theme row. Claude Code's themes that are light are listed here;
+// every other value (dark ones, its own `auto`, unknown, none) draws the dark palette.
+const THEME_ROW_KEY = 'theme'
+const LIGHT_CLAUDE_THEMES: readonly unknown[] = ['light', 'light-daltonized', 'light-ansi']
+const FORCED_LIGHT_THEME = 'light'
+const FORCED_DARK_THEME = 'dark'
+
+/** What `readClaudeTheme` needs from the engine, as plain functions. */
+export type ThemeIo = {
+  list: () => Promise<{ key: string; value: unknown }[]>
+  log: (text: string) => void
+}
+
+export const pickPalette = (config: ChatFramesConfig, claudeTheme: unknown): ChatFramesPalette => {
+  if (config.theme === FORCED_LIGHT_THEME) {
+    return config.colors.light
+  }
+  if (config.theme === FORCED_DARK_THEME) {
+    return config.colors.dark
+  }
+  return LIGHT_CLAUDE_THEMES.includes(claudeTheme) ? config.colors.light : config.colors.dark
+}
+
+// Claude Code's theme as its `/config` row holds it; undefined when the row is
+// missing or the list cannot be read (logged), so the dark palette applies.
+export const readClaudeTheme = async ({ list, log }: ThemeIo): Promise<unknown> => {
+  try {
+    return (await list()).find(row => row.key === THEME_ROW_KEY)?.value
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    log(THEME_READ_FAILED_LOG(message))
+    return undefined
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────

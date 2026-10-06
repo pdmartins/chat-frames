@@ -55,6 +55,8 @@ declare module 'claude-code' {
       lastContextTokens: number | null
       /** The settings read from the config file at the latest `session.start`; never written before the first read. */
       config: ChatFramesConfig
+      /** The colors the rows are drawn with, chosen from the file's theme and Claude Code's; never written before the first read, dark applies. */
+      palette: ChatFramesPalette
     }
   }
 }

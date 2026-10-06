@@ -44,6 +44,7 @@ export const REASON_UNKNOWN_KEY = 'unknown key, ignored'
 export const REASON_NOT_OBJECT_FIELD = 'must be an object, default in use'
 export const REASON_NOT_BOOLEAN = 'must be true or false, default in use'
 export const REASON_NOT_TEXT = 'must be a non-empty string, default in use'
+export const THEME_READ_FAILED_LOG = (message: string) => `theme: Claude Code's theme could not be read (${message}), the dark palette is in use`
 export const REASON_NOT_ALLOWED = (allowed: readonly string[]) => `must be one of ${allowed.join(', ')}, default in use`
 
 const NO_EFFORT_TEXT = '--' // shown when no effort is known

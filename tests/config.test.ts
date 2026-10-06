@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import type { On } from 'claude-code'
 
@@ -10,7 +11,7 @@ import {
   REASON_NOT_TEXT,
   REASON_UNKNOWN_KEY,
 } from '../hooks/display'
-import { describeProblems, loadConfig, parseConfig, resolveConfigPath } from '../hooks/config'
+import { describeProblems, loadConfig, parseConfig, pickPalette, readClaudeTheme, resolveConfigPath } from '../hooks/config'
 import type { ConfigIo } from '../hooks/config'
 
 const INSTALLED_ROOT = '/home/u/.claude/plugins/cache/pdmartins/chat-frames/0.2.0'
@@ -20,6 +21,7 @@ const DEV_PATH = '/home/u/.claude/plugins/data/chat-frames-inline/config.json'
 const HOME = '/home/u'
 const CUSTOM_CONFIG_DIR = '/srv/claude'
 const CONFIG_PATH = '/cfg/config.json'
+const ENGINE_PROVIDER = { plugin: 'engine', tier: 'core' } as const
 
 // The block of the spec, as the file would hold it: the default constant must equal it.
 const SPEC_DEFAULTS = {
@@ -263,4 +265,133 @@ test('the label parts and icons read at session.start change the label of a row 
   })
   expect(await ui.find({ type: 'Text', text: /🕐 2026-10-05 19:54:07 · M Opus 5.5 · 📥 252.8k ─/ })).toBeDefined()
   await ui.unmount()
+})
+
+// ─── Palette: the file's theme and Claude Code's theme choose the colors ─────
+const CLAUDE_THEMES_LIGHT = ['light', 'light-daltonized', 'light-ansi']
+const CLAUDE_THEMES_DARK = ['auto', 'dark', 'dark-daltonized', 'dark-ansi']
+const { dark: DARK, light: LIGHT } = DEFAULT_CONFIG.colors
+const withTheme = (theme: 'auto' | 'light' | 'dark') => ({ ...DEFAULT_CONFIG, theme })
+
+test('with the file theme auto, the light Claude Code themes draw the light palette', () => {
+  for (const claudeTheme of CLAUDE_THEMES_LIGHT) {
+    expect(pickPalette(withTheme('auto'), claudeTheme)).toBe(LIGHT)
+  }
+})
+
+test('with the file theme auto, the other Claude Code themes, an unknown one and a missing one draw the dark palette', () => {
+  for (const claudeTheme of [...CLAUDE_THEMES_DARK, 'sepia', undefined, true]) {
+    expect(pickPalette(withTheme('auto'), claudeTheme)).toBe(DARK)
+  }
+})
+
+test('the file theme light or dark forces its palette whatever Claude Code says', () => {
+  for (const claudeTheme of [...CLAUDE_THEMES_LIGHT, ...CLAUDE_THEMES_DARK, undefined]) {
+    expect(pickPalette(withTheme('light'), claudeTheme)).toBe(LIGHT)
+    expect(pickPalette(withTheme('dark'), claudeTheme)).toBe(DARK)
+  }
+})
+
+test('the palette is the one of the file: changed colors are kept', () => {
+  const config = { ...DEFAULT_CONFIG, colors: { ...DEFAULT_CONFIG.colors, light: { ...LIGHT, userRule: 'red' } } }
+  expect(pickPalette({ ...config, theme: 'light' }, undefined).userRule).toBe('red')
+})
+
+test('readClaudeTheme returns the value of the theme row', async () => {
+  const rows = [{ key: 'verbose', value: true }, { key: 'theme', value: 'light-ansi' }]
+  expect(await readClaudeTheme({ list: async () => rows, log: () => undefined })).toBe('light-ansi')
+})
+
+test('readClaudeTheme gives undefined for a missing row and, logged, for a list that fails', async () => {
+  const logged: string[] = []
+  expect(await readClaudeTheme({ list: async () => [], log: text => logged.push(text) })).toBeUndefined()
+  expect(logged).toEqual([])
+  const failing = async () => {
+    throw new Error('no config')
+  }
+  expect(await readClaudeTheme({ list: failing, log: text => logged.push(text) })).toBeUndefined()
+  expect(logged.length).toBe(1)
+  expect(logged[0]).toContain('no config')
+})
+
+// Session start with the file text and Claude Code's theme row.
+const startSession = async ($: Engine, on: On, fileText: string | undefined, claudeTheme: string, refuseWith?: string) => {
+  mock.env(on, { HOME })
+  mock.store(on)
+  answerFile(on, fileText)
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.log', () => ({ value: undefined }))
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.start', (_$, { cwd }) => ({ cwd }))
+  on('config.list', () => ({
+    value: [{ key: 'theme', label: 'Theme', kind: 'choice', value: claudeTheme, provider: ENGINE_PROVIDER, isLocked: false }],
+  }))
+  // The writer beneath the plugins: the row is written as asked unless the test says it is refused.
+  on('config.set', (_$, { value }) => (refuseWith === undefined ? { value } : { deny: refuseWith }))
+  await $.session.start({ cwd: HOME, surface: null, isInteractive: false })
+}
+
+// The input of a config.set of the theme row, as the menu raises it.
+const themeChange = <T extends string | boolean>(value: T) => ({
+  key: 'theme',
+  value,
+  previous: 'dark',
+  provider: ENGINE_PROVIDER,
+  origin: { kind: 'composer' },
+} as const)
+
+// The background the prompt of a framed user row is drawn with.
+const userBackgroundDrawn = async ($: Engine, requestId: string) => {
+  const ui = await $.ui.mount({
+    plugin: 'chat-frames',
+    surface: 'terminal',
+    component: 'UserMessage',
+    requestId,
+    props: { text: 'hello', origin: { kind: 'composer' }, isExpanded: false },
+    viewport: { columns: 30, rows: 10 },
+  })
+  const prompt = await ui.find({ type: 'Text', text: 'hello' })
+  await ui.unmount()
+  return prompt?.props.backgroundColor
+}
+
+test('session.start reads Claude Code theme: a light one draws the light backgrounds', async ($, on) => {
+  await startSession($, on, undefined, 'light-daltonized')
+  expect(await userBackgroundDrawn($, 'row')).toBe(LIGHT.userBackground)
+})
+
+test('session.start with a dark Claude Code theme draws the dark backgrounds', async ($, on) => {
+  await startSession($, on, undefined, 'dark-ansi')
+  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
+})
+
+test('the file theme dark wins over a light Claude Code theme', async ($, on) => {
+  await startSession($, on, '{"theme":"dark"}', 'light')
+  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
+})
+
+test('before session.start reads anything, the dark palette is drawn', async ($, on) => {
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
+})
+
+test('a config.set of the theme row changes the palette of the rows drawn afterwards', async ($, on) => {
+  await startSession($, on, undefined, 'dark')
+  expect(await userBackgroundDrawn($, 'before')).toBe(DARK.userBackground)
+  const result = await $.config.set(themeChange('light'))
+  expect(result).toEqual({ value: 'light' })
+  expect(await userBackgroundDrawn($, 'after')).toBe(LIGHT.userBackground)
+})
+
+test('a refused config.set of the theme row leaves the palette as it was', async ($, on) => {
+  await startSession($, on, undefined, 'dark', 'locked')
+  expect(await $.config.set(themeChange('light'))).toEqual({ deny: 'locked' })
+  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
+})
+
+test('a config.set of another row does not touch the palette', async ($, on) => {
+  await startSession($, on, undefined, 'dark')
+  await $.config.set({ ...themeChange(true), key: 'verbose', previous: false })
+  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
 })

@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { loadConfig, resolveConfigPath } from './config'
+import { loadConfig, pickPalette, readClaudeTheme, resolveConfigPath } from './config'
 import {
   DEFAULT_CONFIG,
   FALLBACK_COLUMNS,
@@ -24,6 +24,8 @@ const MARKS = { plugin: 'chat-frames', key: 'marks' } as const
 const LAST_EFFORT = { plugin: 'chat-frames', key: 'lastEffort' } as const
 const LAST_CONTEXT_TOKENS = { plugin: 'chat-frames', key: 'lastContextTokens' } as const
 const CONFIG = { plugin: 'chat-frames', key: 'config' } as const
+const PALETTE = { plugin: 'chat-frames', key: 'palette' } as const
+const THEME_ROW_KEY = 'theme'
 const NEVER_WRITTEN_VERSION = 0
 const NO_RESPONSE_TEXT = 'No response requested.' // the engine draws nothing for it
 
@@ -50,8 +52,9 @@ export const register: Register = on => {
   // with the process, so the marks saved in `$.store` are put back here. The first
   // `session.start` is awaited before the first turn, and it runs again on a reload:
   // a mark is written over its saved copy, the baseline only when none is held.
-  // The config file is read here too, so on a reload as well; before the first
-  // read nothing is in state and the defaults apply.
+  // The config file is read here too, so on a reload as well, and with Claude Code's
+  // theme it gives the palette; before the first read nothing is in state and the
+  // defaults apply (the dark palette).
   on('session.start', async ($, e, next) => {
     const path = resolveConfigPath({
       pluginRoot: $.plugin.root,
@@ -65,6 +68,11 @@ export const register: Register = on => {
       toast: text => $.ui.toast(text),
     })
     await $.state.set(CONFIG, config)
+    const claudeTheme = await readClaudeTheme({
+      list: () => $.config.list(),
+      log: text => $.ui.log(text, { to: 'debug' }),
+    })
+    await $.state.set(PALETTE, pickPalette(config, claudeTheme))
     const marks = await restoreSessionMarks(storeOf($), text => $.ui.log(text, { to: 'debug' }), await $.session.id())
     await Promise.all(Object.entries(marks).map(([id, mark]) => $.state.set({ ...MARKS, id }, mark)))
     const savedTokens = newestContextTokens(marks)
@@ -73,6 +81,18 @@ export const register: Register = on => {
       await $.state.set(LAST_CONTEXT_TOKENS, savedTokens)
     }
     return next(e)
+  })
+
+  // A change of Claude Code's theme row: once it is written, the palette is chosen
+  // again with the new value (the one `next` reports, which a hook may have clamped).
+  // A refused change leaves the palette as it was.
+  on('config.set', { key: THEME_ROW_KEY }, async ($, e, next) => {
+    const result = await next(e)
+    if (result.deny === undefined) {
+      const { value: config = DEFAULT_CONFIG } = await $.state.get(CONFIG)
+      await $.state.set(PALETTE, pickPalette(config, result.value))
+    }
+    return result
   })
 
   // Marks only the main thread's rows this mod frames (see isMarkedRow). A row's
@@ -113,7 +133,7 @@ export const register: Register = on => {
 
     const { value: mark } = await $.state.get({ ...MARKS, id: e.requestId })
     const { value: config = DEFAULT_CONFIG } = await $.state.get(CONFIG)
-    const palette = config.colors.dark // this slice always draws the dark palette
+    const { value: palette = DEFAULT_CONFIG.colors.dark } = await $.state.get(PALETTE)
     const columns = e.viewport?.columns ?? FALLBACK_COLUMNS
     const topRule = buildMarkedRule(columns, mark, config)
     const bottomRule = buildPlainRule(columns)

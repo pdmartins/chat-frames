@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import type { On } from 'claude-code'
 
-import type { ChatFramesConfig, ChatFramesMark } from '../types'
+import type { ChatFramesConfig, ChatFramesMark, ChatFramesPalette } from '../types'
 import {
   DEFAULT_CONFIG,
   PROMPT_MARK,
@@ -49,15 +49,18 @@ const ENGINE_ROW = { type: 'engine', ref: 0 } as const
 const ENGINE_NODE = { type: 'engine' } as const
 
 // Stands for the engine's state: only the one mark exists, under exactly the
-// key (plugin, key, id) the plugin reads, and the config when one is given; every
-// other read is a value never written.
-const holdMark = (on: On, mark: ChatFramesMark, config?: ChatFramesConfig) =>
+// key (plugin, key, id) the plugin reads, and the config and the palette when given;
+// every other read is a value never written.
+const holdMark = (on: On, mark: ChatFramesMark, config?: ChatFramesConfig, palette?: ChatFramesPalette) =>
   on('state.get', (_$, ref) => {
     if (ref.plugin === PLUGIN && ref.key === 'marks' && 'id' in ref && ref.id === MARKED_ID) {
       return { value: { value: mark, version: 1 } }
     }
     if (ref.plugin === PLUGIN && ref.key === 'config' && config !== undefined) {
       return { value: { value: config, version: 1 } }
+    }
+    if (ref.plugin === PLUGIN && ref.key === 'palette' && palette !== undefined) {
+      return { value: { value: palette, version: 1 } }
     }
     return { value: { value: undefined, version: 0 } }
   })
@@ -603,10 +606,10 @@ test('the rule is drawn with the label parts and icons of the config in state', 
   await ui.unmount()
 })
 
-test('the rows are drawn with the dark colors of the config in state', async ($, on) => {
+test('the rows are drawn with the palette in state', async ($, on) => {
   on('ui.render', () => ENGINE_ROW)
-  const colors = { ...DEFAULT_CONFIG.colors, dark: { ...DEFAULT_CONFIG.colors.dark, userRule: 'red', userBackground: '#101010' } }
-  holdMark(on, MARK, { ...DEFAULT_CONFIG, colors })
+  const palette = { ...DEFAULT_CONFIG.colors.dark, userRule: 'red', userBackground: '#101010' }
+  holdMark(on, MARK, DEFAULT_CONFIG, palette)
   const ui = await $.ui.mount({
     plugin: PLUGIN,
     surface: SURFACE,
