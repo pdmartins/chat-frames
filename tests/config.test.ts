@@ -385,13 +385,15 @@ test('a config.set of the theme row changes the palette of the rows drawn afterw
 })
 
 test('a refused config.set of the theme row leaves the palette as it was', async ($, on) => {
-  await startSession($, on, undefined, 'dark', 'locked')
-  expect(await $.config.set(themeChange('light'))).toEqual({ deny: 'locked' })
-  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
+  await startSession($, on, undefined, 'light', 'locked')
+  expect(await userBackgroundDrawn($, 'before')).toBe(LIGHT.userBackground)
+  expect(await $.config.set({ ...themeChange('dark'), previous: 'light' })).toEqual({ deny: 'locked' })
+  expect(await userBackgroundDrawn($, 'after')).toBe(LIGHT.userBackground)
 })
 
 test('a config.set of another row does not touch the palette', async ($, on) => {
-  await startSession($, on, undefined, 'dark')
+  await startSession($, on, undefined, 'light')
+  expect(await userBackgroundDrawn($, 'before')).toBe(LIGHT.userBackground)
   await $.config.set({ ...themeChange(true), key: 'verbose', previous: false })
-  expect(await userBackgroundDrawn($, 'row')).toBe(DARK.userBackground)
+  expect(await userBackgroundDrawn($, 'after')).toBe(LIGHT.userBackground)
 })
