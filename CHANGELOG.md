@@ -5,6 +5,8 @@ Versions are MAJOR.MINOR.REVISION and change only on a release.
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-06
+
 ### Added
 
 - A config file, `<config-dir>/plugins/data/chat-frames-pdmartins/config.json`,
