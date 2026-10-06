@@ -1,0 +1,179 @@
+# chat-frames
+
+A Claude Code plugin that frames each message in the transcript.
+
+Each prompt you type and each assistant reply (each block of reply text) gets:
+
+- a top rule that carries a label,
+- a closing rule,
+- a tinted background between the two rules.
+
+By default prompts use a blue rule and replies a terracotta rule. The label can hold:
+
+| Part | User frame | Assistant frame |
+| --- | --- | --- |
+| Date and time the row was added | yes | yes |
+| Model and effort, like `Opus 5.5 (high)` | no | yes |
+| Context tokens in use, and the change since the previous frame | yes | yes |
+
+Only the main conversation is framed. Subagent messages are not.
+
+## Install
+
+```
+/plugin marketplace add pdmartins/claude-plugins
+/plugin install chat-frames@pdmartins
+```
+
+Hooks load when a session starts, so open a new session after installing.
+
+## Config file
+
+The plugin works without a config file. To change anything, create this file:
+
+```
+<config-dir>/plugins/data/chat-frames-pdmartins/config.json
+```
+
+`<config-dir>` is `$CLAUDE_CONFIG_DIR` if you set it, otherwise `~/.claude`.
+The file sits in the plugin's data folder, which survives plugin updates.
+
+Create the folder with:
+
+```
+mkdir -p ~/.claude/plugins/data/chat-frames-pdmartins
+```
+
+Every field is optional. A field you leave out keeps its default.
+
+### Default file
+
+This is the complete default. A file with exactly this content changes nothing.
+
+```json
+{
+  "theme": "auto",
+  "show":   { "date": true, "time": true, "model": true, "effort": true, "tokens": true, "tokensDelta": true },
+  "format": { "date": "DD/MM", "time": "HH:mm:ss" },
+  "icons":  { "time": "🕐", "model": "🤖", "tokens": "📥" },
+  "colors": {
+    "dark":  { "userRule": "blue", "userBackground": "#0f1b33", "assistantRule": "claude", "assistantBackground": "#2b1811" },
+    "light": { "userRule": "blue", "userBackground": "#e3ebf8", "assistantRule": "claude", "assistantBackground": "#f8e6de" }
+  }
+}
+```
+
+### Fields
+
+`theme` is `auto`, `light` or `dark`. It picks the color palette, see [Theme](#theme).
+
+`show` turns parts of the label on or off:
+
+- `date` and `time`: the stamp. With both off, the time icon goes too.
+- `model`: the model name (assistant frames only).
+- `effort`: the effort in parentheses after the model. Off drops the parentheses too.
+- `tokens`: the context tokens in use. Off drops the change next to it too.
+- `tokensDelta`: only the change in tokens since the previous frame, like `(+1.2k)`.
+
+With every part off, or nothing to show, the top rule has no label.
+
+`format` is the pattern for the date and the time. These codes are replaced:
+
+| Code | Meaning |
+| --- | --- |
+| `YYYY` | year, four digits |
+| `YY` | year, two digits |
+| `MM` | month |
+| `DD` | day |
+| `HH` | hour, 24-hour clock |
+| `mm` | minute |
+| `ss` | second |
+
+Codes are case-sensitive: `MM` is the month and `mm` is the minute. Any other
+text stays as you wrote it.
+
+`icons` are the symbols before the stamp, the model and the tokens.
+
+`colors` hold one set per palette, `dark` and `light`. Each has the rule color
+and the background of user frames and of assistant frames. A rule color is a
+Claude Code theme color key (`claude`, `blue`) or a hex value. The plugin does
+not check the color you write.
+
+Icons, formats and colors do not accept empty text. An empty one keeps the
+default. To hide a part, use `show`.
+
+### Problems in the file
+
+- A field with the wrong type, a value that is not allowed, or an unknown key
+  keeps the default for that field.
+- A file that is not valid JSON, or not a JSON object, keeps the whole default.
+- Either way you get one warning toast when the file is read. It names the file,
+  each field and the reason. The same text goes to the debug log.
+- A missing file means the defaults, with no message.
+
+### When an edit takes effect
+
+The file is read when a session starts, and again when the plugin reloads.
+The plugin does not watch the file, so an edit applies from the next session.
+
+## Theme
+
+With `"theme": "auto"` the palette follows Claude Code's theme. The themes
+`light`, `light-daltonized` and `light-ansi` use the `light` colors. Every other
+theme uses the `dark` colors.
+
+Switching the theme with `/theme` or `/config` repaints new and existing frames.
+This was seen on screen on Claude Code 2.1.291.
+
+### Limitation of Claude Code's `auto` theme
+
+Claude Code's own `auto` theme follows the terminal. The plugin cannot see what
+Claude Code detected, so it uses the dark palette. On a light terminal with
+Claude Code's `auto` theme, set this in the file:
+
+```json
+{ "theme": "light" }
+```
+
+### The terminal background
+
+Claude Code's theme does not change the terminal's background. The terminal app
+paints it. Claude Code's `light` theme is meant for a terminal with a light
+background.
+
+On a dark terminal with the `light` theme, the light palette puts the terminal's
+light text on light frames. That is hard to read (seen on screen). Use a light
+terminal profile, or force `"theme": "dark"`.
+
+## Compatibility
+
+Built and tested on Claude Code 2.1.291. The plugin manifest has no
+minimum-version field, so it does not declare a minimum.
+
+## Development
+
+`plugin/` is the plugin root. It is what gets installed: the marketplace
+installs it as a `git-subdir` source. Repo-level files (this README, the
+changelog, `publish.sh`) stay at the root.
+
+Checks:
+
+```
+claude plugin validate plugin --strict
+claude plugin test plugin
+tsc -p plugin
+```
+
+`tsc -p plugin` needs the types Claude Code generates in
+`plugin/.claude-plugin/types/`. Load the plugin once as a dev mod, or with
+`--plugin-dir plugin`, to generate them.
+
+A plugin loaded from a folder has no marketplace, so it reads its config from
+`<config-dir>/plugins/data/chat-frames-inline/config.json`.
+
+Releases use `bash publish.sh` (`--minor` is the default, `--major`,
+`--revision`, `--dry-run`). The header of `publish.sh` has the details.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
