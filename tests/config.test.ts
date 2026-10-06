@@ -2,7 +2,14 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import type { On } from 'claude-code'
 
-import { DEFAULT_CONFIG } from '../hooks/display'
+import {
+  DEFAULT_CONFIG,
+  REASON_NOT_ALLOWED,
+  REASON_NOT_BOOLEAN,
+  REASON_NOT_OBJECT_FIELD,
+  REASON_NOT_TEXT,
+  REASON_UNKNOWN_KEY,
+} from '../hooks/display'
 import { describeProblems, loadConfig, parseConfig, resolveConfigPath } from '../hooks/config'
 import type { ConfigIo } from '../hooks/config'
 
@@ -27,6 +34,7 @@ const SPEC_DEFAULTS = {
 }
 
 const fieldsOf = (problems: { field: string }[]) => problems.map(problem => problem.field)
+const reasonsOf = (problems: { reason: string }[]) => problems.map(problem => problem.reason)
 
 // A file system in memory: `files` holds the text by path; a path in `unreadable` exists but fails to read.
 const memoryIo = (files: Record<string, string>, unreadable: string[] = []) => {
@@ -55,6 +63,13 @@ test('a plugin loaded from a folder keeps its config under CLAUDE_CONFIG_DIR, el
   const inline = 'plugins/data/chat-frames-inline/config.json'
   expect(resolveConfigPath({ pluginRoot: DEV_ROOT, configDir: CUSTOM_CONFIG_DIR, home: HOME })).toBe(`${CUSTOM_CONFIG_DIR}/${inline}`)
   expect(resolveConfigPath({ pluginRoot: DEV_ROOT, configDir: undefined, home: HOME })).toBe(`${HOME}/.claude/${inline}`)
+})
+
+test('a root with /plugins/cache/ but fewer than two segments after it is read as a folder plugin', () => {
+  const inline = 'plugins/data/chat-frames-inline/config.json'
+  for (const pluginRoot of ['/home/u/.claude/plugins/cache/', '/home/u/.claude/plugins/cache/pdmartins']) {
+    expect(resolveConfigPath({ pluginRoot, configDir: undefined, home: HOME })).toBe(`${HOME}/.claude/${inline}`)
+  }
 })
 
 test('with no CLAUDE_CONFIG_DIR and no HOME there is no config path', () => {
@@ -99,6 +114,7 @@ test('a field of the wrong type keeps its default and is named in the problems',
     '{"show":{"date":"yes","time":false},"format":{"date":5},"icons":{"time":""},"colors":{"dark":"blue"}}',
   )
   expect(fieldsOf(problems)).toEqual(['show.date', 'format.date', 'icons.time', 'colors.dark'])
+  expect(reasonsOf(problems)).toEqual([REASON_NOT_BOOLEAN, REASON_NOT_TEXT, REASON_NOT_TEXT, REASON_NOT_OBJECT_FIELD])
   expect(config.show).toEqual({ ...SPEC_DEFAULTS.show, time: false })
   expect(config.format.date).toBe(SPEC_DEFAULTS.format.date)
   expect(config.icons.time).toBe(SPEC_DEFAULTS.icons.time)
@@ -109,12 +125,13 @@ test('a value that is not allowed keeps the default of its field', () => {
   const { config, problems } = parseConfig('{"theme":"sepia"}')
   expect(config.theme).toBe('auto')
   expect(fieldsOf(problems)).toEqual(['theme'])
-  expect(problems[0]?.reason).toContain('auto, light, dark')
+  expect(reasonsOf(problems)).toEqual([REASON_NOT_ALLOWED(['auto', 'light', 'dark'])])
 })
 
 test('an unknown key is ignored and reported, at any depth, while the valid fields are kept', () => {
   const { config, problems } = parseConfig('{"themes":"dark","theme":"dark","show":{"clock":true},"colors":{"dark":{"link":"red"}}}')
   expect(fieldsOf(problems)).toEqual(['themes', 'show.clock', 'colors.dark.link'])
+  expect(reasonsOf(problems)).toEqual([REASON_UNKNOWN_KEY, REASON_UNKNOWN_KEY, REASON_UNKNOWN_KEY])
   expect(config).toEqual({ ...SPEC_DEFAULTS, theme: 'dark' })
 })
 
@@ -217,5 +234,33 @@ test('the colors read at session.start are the ones the rows are drawn with', as
   const rules = await ui.findAll({ type: 'Text', text: /^─/ })
   expect(rules.length).toBe(2)
   expect(rules.every(rule => rule.props.color === 'red')).toBe(true)
+  await ui.unmount()
+})
+
+test('the label parts and icons read at session.start change the label of a row with a mark', async ($, on) => {
+  const stamp = new Date(2026, 9, 5, 19, 54, 7).getTime()
+  const mark = { at: stamp, contextTokens: 252831, contextDelta: 22310, model: 'claude-opus-5-5', effort: 'xhigh' }
+  mock.env(on, { HOME })
+  mock.store(on)
+  answerFile(on, '{"show":{"effort":false,"tokensDelta":false},"icons":{"model":"M"},"format":{"date":"YYYY-MM-DD"}}')
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.log', () => ({ value: undefined }))
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.start', (_$, { cwd }) => ({ cwd }))
+  // The mark is the one state value this test stands in for; the config is the one session.start wrote.
+  on('state.get', (_$, ref, next) =>
+    ref.key === 'marks' && 'id' in ref && ref.id === 'row' ? { value: { value: mark, version: 1 } } : next(ref),
+  )
+  await $.session.start({ cwd: HOME, surface: null, isInteractive: false })
+  const ui = await $.ui.mount({
+    plugin: 'chat-frames',
+    surface: 'terminal',
+    component: 'AssistantMessage',
+    requestId: 'row',
+    props: { text: 'hi', isFirstOfReply: true },
+    viewport: { columns: 100, rows: 10 },
+  })
+  expect(await ui.find({ type: 'Text', text: /🕐 2026-10-05 19:54:07 · M Opus 5.5 · 📥 252.8k ─/ })).toBeDefined()
   await ui.unmount()
 })
