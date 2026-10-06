@@ -1,11 +1,48 @@
-// ─── Config file: where it is ────────────────────────────────────────────────
-// The file is `config.json` in the plugin's data folder.
+import { DEFAULT_CONFIG } from './display'
+import type { ChatFramesConfig } from '../types'
+
+// ─── Config file: where it is, how it is read and checked ────────────────────
+// The file is `config.json` in the plugin's data folder. Every field is optional:
+// a missing one, and one that is not valid, keep the default (see DEFAULT_CONFIG).
+// A problem never stops the plugin: it is reported once per read, to a toast and
+// to the debug log.
 const INSTALLED_PLUGIN_MARKER = '/plugins/cache/'
 const DATA_FOLDER = 'plugins/data'
 const CONFIG_FILE = 'config.json'
 const DEV_MOD_PLUGIN_FOLDER = 'chat-frames-inline'
 const DEFAULT_CONFIG_DIR_NAME = '.claude'
 const PATH_SEPARATOR = '/'
+const FIELD_SEPARATOR = '.'
+const ALLOWED_THEMES = ['auto', 'light', 'dark']
+// The values a string field may take, by field; a string field not listed takes any non-empty text.
+const ALLOWED_VALUES: Readonly<Record<string, readonly string[]>> = { theme: ALLOWED_THEMES }
+
+// What the reader of the toast and of the log sees.
+const FILE_FIELD = 'file'
+const TOAST_PREFIX = 'chat-frames: config problems in'
+const PROBLEM_SEPARATOR = '; '
+const READ_LOG_TEMPLATE = (path: string) => `config: reading ${path}`
+const MISSING_LOG_TEMPLATE = (path: string) => `config: ${path} does not exist, defaults in use`
+const NO_PATH_LOG = 'config: the config directory is unknown (HOME and CLAUDE_CONFIG_DIR are unset), defaults in use'
+const REASON_NOT_JSON = (message: string) => `not valid JSON (${message}), all defaults in use`
+const REASON_NOT_OBJECT = 'must be a JSON object, all defaults in use'
+const REASON_READ_FAILED = (message: string) => `could not be read (${message}), all defaults in use`
+const REASON_UNKNOWN_KEY = 'unknown key, ignored'
+const REASON_NOT_OBJECT_FIELD = 'must be an object, default in use'
+const REASON_NOT_BOOLEAN = 'must be true or false, default in use'
+const REASON_NOT_TEXT = 'must be a non-empty string, default in use'
+const REASON_NOT_ALLOWED = (allowed: readonly string[]) => `must be one of ${allowed.join(', ')}, default in use`
+
+export type ConfigProblem = { field: string; reason: string }
+export type ParsedConfig = { config: ChatFramesConfig; problems: ConfigProblem[] }
+
+/** What `loadConfig` needs from the engine, as plain functions. */
+export type ConfigIo = {
+  exists: (path: string) => Promise<boolean>
+  read: (path: string) => Promise<string>
+  log: (text: string) => void
+  toast: (text: string) => void
+}
 
 export type ConfigPathInput = {
   pluginRoot: string
@@ -32,5 +69,110 @@ export const resolveConfigPath = ({ pluginRoot, configDir, home }: ConfigPathInp
   }
   const baseDir = configDir || (home ? joinPath(home, DEFAULT_CONFIG_DIR_NAME) : undefined)
   return baseDir === undefined ? undefined : joinPath(baseDir, DATA_FOLDER, DEV_MOD_PLUGIN_FOLDER, CONFIG_FILE)
+}
+
+type JsonObject = Record<string, unknown>
+const isObject = (value: unknown): value is JsonObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+// Walks the defaults as the schema: a boolean default takes a boolean, a string
+// default a non-empty string (one of ALLOWED_VALUES when listed), an object default
+// an object of the same shape. The result holds every field of the defaults.
+const checkSection = (
+  defaults: JsonObject,
+  input: JsonObject,
+  parent: string,
+  problems: ConfigProblem[],
+): JsonObject => {
+  const result: JsonObject = {}
+  for (const key of Object.keys(input)) {
+    if (!Object.hasOwn(defaults, key)) {
+      problems.push({ field: parent + key, reason: REASON_UNKNOWN_KEY })
+    }
+  }
+  for (const [key, fallback] of Object.entries(defaults)) {
+    const field = parent + key
+    const value = Object.hasOwn(input, key) ? input[key] : undefined
+    result[key] = checkField(fallback, value, field, problems)
+  }
+  return result
+}
+
+const checkField = (fallback: unknown, value: unknown, field: string, problems: ConfigProblem[]): unknown => {
+  if (value === undefined) {
+    return fallback
+  }
+  if (isObject(fallback)) {
+    if (isObject(value)) {
+      return checkSection(fallback, value, field + FIELD_SEPARATOR, problems)
+    }
+    problems.push({ field, reason: REASON_NOT_OBJECT_FIELD })
+    return fallback
+  }
+  if (typeof fallback === 'boolean') {
+    if (typeof value === 'boolean') {
+      return value
+    }
+    problems.push({ field, reason: REASON_NOT_BOOLEAN })
+    return fallback
+  }
+  if (typeof value !== 'string' || value === '') {
+    problems.push({ field, reason: REASON_NOT_TEXT })
+    return fallback
+  }
+  const allowed = ALLOWED_VALUES[field]
+  if (allowed !== undefined && !allowed.includes(value)) {
+    problems.push({ field, reason: REASON_NOT_ALLOWED(allowed) })
+    return fallback
+  }
+  return value
+}
+
+// Text that is not JSON, or JSON that is not an object, gives all defaults and one problem.
+export const parseConfig = (text: string): ParsedConfig => {
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { config: DEFAULT_CONFIG, problems: [{ field: FILE_FIELD, reason: REASON_NOT_JSON(message) }] }
+  }
+  if (!isObject(json)) {
+    return { config: DEFAULT_CONFIG, problems: [{ field: FILE_FIELD, reason: REASON_NOT_OBJECT }] }
+  }
+  const problems: ConfigProblem[] = []
+  // checkSection builds the result from DEFAULT_CONFIG's own shape, so it is a ChatFramesConfig.
+  const config = checkSection(DEFAULT_CONFIG, json, '', problems) as ChatFramesConfig
+  return { config, problems }
+}
+
+export const describeProblems = (path: string, problems: ConfigProblem[]): string =>
+  `${TOAST_PREFIX} ${path}: ${problems.map(({ field, reason }) => `${field} ${reason}`).join(PROBLEM_SEPARATOR)}`
+
+// One read of the file: the path is logged, a missing file gives the defaults without
+// a word, any problem is reported once (toast and debug log) and the valid part is kept.
+export const loadConfig = async (path: string | undefined, io: ConfigIo): Promise<ChatFramesConfig> => {
+  if (path === undefined) {
+    io.log(NO_PATH_LOG)
+    return DEFAULT_CONFIG
+  }
+  io.log(READ_LOG_TEMPLATE(path))
+  let parsed: ParsedConfig
+  try {
+    if (!(await io.exists(path))) {
+      io.log(MISSING_LOG_TEMPLATE(path))
+      return DEFAULT_CONFIG
+    }
+    parsed = parseConfig(await io.read(path))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    parsed = { config: DEFAULT_CONFIG, problems: [{ field: FILE_FIELD, reason: REASON_READ_FAILED(message) }] }
+  }
+  if (parsed.problems.length > 0) {
+    const report = describeProblems(path, parsed.problems)
+    io.toast(report)
+    io.log(report)
+  }
+  return parsed.config
 }
 // ─────────────────────────────────────────────────────────────────────────────

@@ -49,13 +49,18 @@ const ENGINE_ROW = { type: 'engine', ref: 0 } as const
 const ENGINE_NODE = { type: 'engine' } as const
 
 // Stands for the engine's state: only the one mark exists, under exactly the
-// key (plugin, key, id) the plugin reads; every other read is a value never written.
-const holdMark = (on: On, mark: ChatFramesMark) =>
-  on('state.get', (_$, ref) =>
-    ref.plugin === PLUGIN && ref.key === 'marks' && 'id' in ref && ref.id === MARKED_ID
-      ? { value: { value: mark, version: 1 } }
-      : { value: { value: undefined, version: 0 } },
-  )
+// key (plugin, key, id) the plugin reads, and the config when one is given; every
+// other read is a value never written.
+const holdMark = (on: On, mark: ChatFramesMark, config?: ChatFramesConfig) =>
+  on('state.get', (_$, ref) => {
+    if (ref.plugin === PLUGIN && ref.key === 'marks' && 'id' in ref && ref.id === MARKED_ID) {
+      return { value: { value: mark, version: 1 } }
+    }
+    if (ref.plugin === PLUGIN && ref.key === 'config' && config !== undefined) {
+      return { value: { value: config, version: 1 } }
+    }
+    return { value: { value: undefined, version: 0 } }
+  })
 
 // The default config with some fields changed, one level down.
 const configWith = (changes: {
@@ -581,4 +586,38 @@ test('the stamp follows the patterns of the config', () => {
 test('a date or a time shown alone has no stray separator', () => {
   expect(formatStamp(LOCAL_STAMP, configWith({ show: { time: false } }))).toBe('🕐 05/10')
   expect(formatStamp(LOCAL_STAMP, configWith({ show: { date: false } }))).toBe('🕐 19:54:07')
+})
+
+test('the rule is drawn with the label parts and icons of the config in state', async ($, on) => {
+  on('ui.render', () => ENGINE_ROW)
+  holdMark(on, MODEL_MARK, configWith({ show: { effort: false, tokensDelta: false }, icons: { model: '🧠' } }))
+  const ui = await $.ui.mount({
+    plugin: PLUGIN,
+    surface: SURFACE,
+    component: 'AssistantMessage',
+    requestId: MARKED_ID,
+    props: { text: 'hi', isFirstOfReply: true },
+    viewport: { columns: LABEL_COLUMNS, rows: 10 },
+  })
+  expect(await ui.find({ type: 'Text', text: /🕐 05\/10 19:54:07 · 🧠 Opus 5.5 · 📥 252.8k ─/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the rows are drawn with the dark colors of the config in state', async ($, on) => {
+  on('ui.render', () => ENGINE_ROW)
+  const colors = { ...DEFAULT_CONFIG.colors, dark: { ...DEFAULT_CONFIG.colors.dark, userRule: 'red', userBackground: '#101010' } }
+  holdMark(on, MARK, { ...DEFAULT_CONFIG, colors })
+  const ui = await $.ui.mount({
+    plugin: PLUGIN,
+    surface: SURFACE,
+    component: 'UserMessage',
+    requestId: MARKED_ID,
+    props: { text: PROMPT_TEXT, origin: { kind: 'composer' }, isExpanded: false },
+    viewport: VIEWPORT,
+  })
+  const rules = await ui.findAll({ type: 'Text', text: /^─/ })
+  expect(rules.every(rule => rule.props.color === 'red')).toBe(true)
+  const prompt = await ui.find({ type: 'Text', text: PROMPT_TEXT })
+  expect(prompt?.props.backgroundColor).toBe('#101010')
+  await ui.unmount()
 })

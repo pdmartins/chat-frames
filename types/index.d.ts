@@ -53,6 +53,8 @@ declare module 'claude-code' {
       lastEffort: string | null
       /** Context tokens recorded on the latest framed row, null when it had none. */
       lastContextTokens: number | null
+      /** The settings read from the config file at the latest `session.start`; never written before the first read. */
+      config: ChatFramesConfig
     }
   }
 }

@@ -1,5 +1,6 @@
 import type { Register } from 'claude-code'
 
+import { loadConfig, resolveConfigPath } from './config'
 import {
   DEFAULT_CONFIG,
   FALLBACK_COLUMNS,
@@ -22,6 +23,7 @@ import type { MarkStore } from './marks'
 const MARKS = { plugin: 'chat-frames', key: 'marks' } as const
 const LAST_EFFORT = { plugin: 'chat-frames', key: 'lastEffort' } as const
 const LAST_CONTEXT_TOKENS = { plugin: 'chat-frames', key: 'lastContextTokens' } as const
+const CONFIG = { plugin: 'chat-frames', key: 'config' } as const
 const NEVER_WRITTEN_VERSION = 0
 const NO_RESPONSE_TEXT = 'No response requested.' // the engine draws nothing for it
 
@@ -48,7 +50,21 @@ export const register: Register = on => {
   // with the process, so the marks saved in `$.store` are put back here. The first
   // `session.start` is awaited before the first turn, and it runs again on a reload:
   // a mark is written over its saved copy, the baseline only when none is held.
+  // The config file is read here too, so on a reload as well; before the first
+  // read nothing is in state and the defaults apply.
   on('session.start', async ($, e, next) => {
+    const path = resolveConfigPath({
+      pluginRoot: $.plugin.root,
+      configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
+      home: await $.env.get('HOME'),
+    })
+    const config = await loadConfig(path, {
+      exists: filePath => $.fs.exists(filePath),
+      read: filePath => $.fs.read(filePath),
+      log: text => $.ui.log(text, { to: 'debug' }),
+      toast: text => $.ui.toast(text),
+    })
+    await $.state.set(CONFIG, config)
     const marks = await restoreSessionMarks(storeOf($), text => $.ui.log(text, { to: 'debug' }), await $.session.id())
     await Promise.all(Object.entries(marks).map(([id, mark]) => $.state.set({ ...MARKS, id }, mark)))
     const savedTokens = newestContextTokens(marks)
@@ -96,7 +112,7 @@ export const register: Register = on => {
     }
 
     const { value: mark } = await $.state.get({ ...MARKS, id: e.requestId })
-    const config = DEFAULT_CONFIG
+    const { value: config = DEFAULT_CONFIG } = await $.state.get(CONFIG)
     const palette = config.colors.dark // this slice always draws the dark palette
     const columns = e.viewport?.columns ?? FALLBACK_COLUMNS
     const topRule = buildMarkedRule(columns, mark, config)
