@@ -92,7 +92,7 @@ test('a mark shows the context tokens after the time, in thousands from 1000 up'
   expect(formatMark({ at: LOCAL_STAMP, contextTokens: 812 })).toBe('🕐 05/10 19:54:07 · 📥 812')
 })
 
-test('a mark shows time, then model with effort as qp-statusline does, then context tokens', () => {
+test('a mark shows time, then model with effort, then context tokens', () => {
   const mark = { at: LOCAL_STAMP, contextTokens: 45231, model: 'claude-opus-5-5', effort: 'high' }
   expect(formatMark(mark)).toBe('🕐 05/10 19:54:07 · 🤖 Opus 5.5 (high) · 📥 45.2k')
 })

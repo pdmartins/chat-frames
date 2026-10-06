@@ -20,7 +20,7 @@ export const PROMPT_MARK = '❯ '
 export const FALLBACK_COLUMNS = 80
 const STAMP_ICON = '🕐'
 const MODEL_ICON = '🤖'
-const NO_EFFORT_TEXT = '--' // as qp-statusline shows a missing effort
+const NO_EFFORT_TEXT = '--' // shown when no effort is known
 const TOKENS_ICON = '📥'
 const LABEL_SEPARATOR = ' · '
 const THOUSANDS_SUFFIX = 'k'
@@ -70,7 +70,7 @@ export const formatModelName = (modelId: string): string => {
   return `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join(VERSION_JOIN)}`
 }
 
-// Same shape as qp-statusline's model item: `🤖 <model> (<effort>)`.
+// Shape: `🤖 <model> (<effort>)`.
 export const formatModel = (modelId: string, effort: string | null): string =>
   `${MODEL_ICON} ${formatModelName(modelId)} (${effort ?? NO_EFFORT_TEXT})`
 
