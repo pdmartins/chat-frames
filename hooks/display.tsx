@@ -67,8 +67,8 @@ const VERSION_JOIN = '.'
 // The pieces of a date or time pattern; each becomes a number. The longer YYYY is
 // tried before YY, and the match is case-sensitive (MM month, mm minute).
 const PATTERN_TOKENS = /YYYY|YY|MM|DD|HH|mm|ss/g
-const YEAR_DIGITS = 4
-const FIELD_DIGITS = 2
+// How many digits each token is padded to: four for the year, two for the rest.
+const TOKEN_DIGITS: Readonly<Record<string, number>> = { YYYY: 4, YY: 2, MM: 2, DD: 2, HH: 2, mm: 2, ss: 2 }
 const YEAR_MODULO = 100
 const PAD_CHAR = '0'
 const dateFields = (date: Date): Record<string, number> => ({
@@ -83,10 +83,7 @@ const dateFields = (date: Date): Record<string, number> => ({
 
 export const formatPattern = (pattern: string, date: Date): string => {
   const fields = dateFields(date)
-  return pattern.replace(PATTERN_TOKENS, token => {
-    const digits = token === 'YYYY' ? YEAR_DIGITS : FIELD_DIGITS
-    return String(fields[token]).padStart(digits, PAD_CHAR)
-  })
+  return pattern.replace(PATTERN_TOKENS, token => String(fields[token]).padStart(TOKEN_DIGITS[token] ?? 0, PAD_CHAR))
 }
 
 // Shape: `<icon> <date> <time>`; either one alone has no separator, and with
