@@ -1,0 +1,7 @@
+{
+  "name": "qp-mod-chat-frames",
+  "version": "0.2.0",
+  "description": "Frames each user prompt (blue) and assistant reply block (terracotta) in the transcript with a timestamped top rule, a closing rule and a dark tinted background.",
+  "author": { "name": "pmartins" },
+  "types": "./types/index.d.ts"
+}
