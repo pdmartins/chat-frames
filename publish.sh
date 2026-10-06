@@ -156,7 +156,7 @@ START_RELEASE_SHA=""
 
 explain_unpublished_release() {
   warn "the release stopped before it was published: nothing reached $REMOTE (the push is atomic)."
-  warn "To finish: fix the cause above (resolve the merge, or git fetch and look at what $REMOTE has), then:"
+  warn "To finish: fix the cause above. After a merge conflict, resolve it and commit the merge (git commit) first. Then:"
   warn "    git push --atomic $REMOTE $CURRENT_BRANCH $RELEASE_BRANCH"
   warn "To undo:"
   warn "    git merge --abort   # only if a merge is open"
@@ -213,7 +213,7 @@ if ref_exists "heads/$RELEASE_BRANCH"; then
   MERGE_TARGET="$RELEASE_BRANCH"
   if ref_exists "remotes/$REMOTE/$RELEASE_BRANCH" && \
      ! git merge-base --is-ancestor "$REMOTE/$RELEASE_BRANCH" "$RELEASE_BRANCH"; then
-    error "local $RELEASE_BRANCH is behind $REMOTE/$RELEASE_BRANCH. Update it first (git checkout $RELEASE_BRANCH && git pull --ff-only)."
+    error "local $RELEASE_BRANCH is behind $REMOTE/$RELEASE_BRANCH. Update it first (git checkout $RELEASE_BRANCH && git merge --ff-only $REMOTE/$RELEASE_BRANCH)."
   fi
 elif ref_exists "remotes/$REMOTE/$RELEASE_BRANCH"; then
   MERGE_TARGET="$REMOTE/$RELEASE_BRANCH"
