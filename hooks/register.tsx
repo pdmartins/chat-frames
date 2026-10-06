@@ -18,9 +18,9 @@ import {
 } from './marks'
 import type { MarkStore } from './marks'
 
-const MARKS = { plugin: 'qp-mod-chat-frames', key: 'marks' } as const
-const LAST_EFFORT = { plugin: 'qp-mod-chat-frames', key: 'lastEffort' } as const
-const LAST_CONTEXT_TOKENS = { plugin: 'qp-mod-chat-frames', key: 'lastContextTokens' } as const
+const MARKS = { plugin: 'chat-frames', key: 'marks' } as const
+const LAST_EFFORT = { plugin: 'chat-frames', key: 'lastEffort' } as const
+const LAST_CONTEXT_TOKENS = { plugin: 'chat-frames', key: 'lastContextTokens' } as const
 const NEVER_WRITTEN_VERSION = 0
 const NO_RESPONSE_TEXT = 'No response requested.' // the engine draws nothing for it
 

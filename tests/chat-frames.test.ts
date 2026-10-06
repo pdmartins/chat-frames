@@ -28,7 +28,7 @@ import {
 } from '../hooks/marks'
 import type { AppendedRow, MarkStore } from '../hooks/marks'
 
-const PLUGIN = 'qp-mod-chat-frames'
+const PLUGIN = 'chat-frames'
 const SURFACE = 'terminal'
 const COLUMNS = 30
 const WIDE_COLUMNS = 60

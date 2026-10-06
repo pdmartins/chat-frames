@@ -138,7 +138,7 @@ export const persistMark = (
         await store.delete(stale)
       }
     } catch (error) {
-      log(`qp-mod-chat-frames: could not save the mark of row ${uuid}: ${describeError(error)}`)
+      log(`chat-frames: could not save the mark of row ${uuid}: ${describeError(error)}`)
     }
   }
   pendingWrite = pendingWrite.then(write)
@@ -161,7 +161,7 @@ export const restoreSessionMarks = async (
     }
     return marks
   } catch (error) {
-    log(`qp-mod-chat-frames: could not load the saved marks of session ${sessionId}: ${describeError(error)}`)
+    log(`chat-frames: could not load the saved marks of session ${sessionId}: ${describeError(error)}`)
     return {}
   }
 }

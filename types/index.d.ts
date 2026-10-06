@@ -17,7 +17,7 @@ export type ChatFramesSessionMarks = Record<string, ChatFramesMark>
 
 declare module 'claude-code' {
   interface PluginState {
-    'qp-mod-chat-frames': {
+    'chat-frames': {
       /** One mark per transcript row, keyed by the row's uuid. */
       marks: StateFamily<ChatFramesMark>
       /** The effort level the main loop's latest model request asked for, null for a model without effort. */
