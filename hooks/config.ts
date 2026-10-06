@@ -182,7 +182,7 @@ export const loadConfig = async (path: string | undefined, io: ConfigIo): Promis
 // The file's `theme` decides: `light` and `dark` force a palette; `auto` follows
 // Claude Code's own theme row. Claude Code's themes that are light are listed here;
 // every other value (dark ones, its own `auto`, unknown, none) draws the dark palette.
-const THEME_ROW_KEY = 'theme'
+export const THEME_ROW_KEY = 'theme'
 const LIGHT_CLAUDE_THEMES: readonly unknown[] = ['light', 'light-daltonized', 'light-ansi']
 const FORCED_LIGHT_THEME = 'light'
 const FORCED_DARK_THEME = 'dark'
