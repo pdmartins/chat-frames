@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { THEME_ROW_KEY, loadConfig, pickPalette, readClaudeTheme, resolveConfigPath } from './config'
+import { loadConfig, pickPalette, readClaudeTheme, resolveConfigPath } from './config'
 import {
   DEFAULT_CONFIG,
   FALLBACK_COLUMNS,
@@ -25,6 +25,8 @@ const LAST_EFFORT = { plugin: 'chat-frames', key: 'lastEffort' } as const
 const LAST_CONTEXT_TOKENS = { plugin: 'chat-frames', key: 'lastContextTokens' } as const
 const CONFIG = { plugin: 'chat-frames', key: 'config' } as const
 const PALETTE = { plugin: 'chat-frames', key: 'palette' } as const
+// The hook filter must be a literal the validator can read: an imported constant shows as `key=?`.
+const THEME_ROW_KEY = 'theme'
 const NEVER_WRITTEN_VERSION = 0
 const NO_RESPONSE_TEXT = 'No response requested.' // the engine draws nothing for it
 
