@@ -218,8 +218,15 @@ if ref_exists "heads/$RELEASE_BRANCH"; then
 elif ref_exists "remotes/$REMOTE/$RELEASE_BRANCH"; then
   MERGE_TARGET="$REMOTE/$RELEASE_BRANCH"
 fi
-if [ -n "$MERGE_TARGET" ] && ! git merge-tree --write-tree --quiet "$MERGE_TARGET" HEAD >/dev/null 2>&1; then
-  error "merging $CURRENT_BRANCH into $MERGE_TARGET would conflict. Bring $MERGE_TARGET into $CURRENT_BRANCH and resolve it there first."
+if [ -n "$MERGE_TARGET" ]; then
+  # A trial merge in memory (git 2.38+): exit 1 means conflicts, anything else
+  # means the trial itself could not run.
+  MERGE_TRIAL_STATUS=0
+  git merge-tree --write-tree "$MERGE_TARGET" HEAD >/dev/null 2>&1 || MERGE_TRIAL_STATUS=$?
+  [ "$MERGE_TRIAL_STATUS" -ne 1 ] || \
+    error "merging $CURRENT_BRANCH into $MERGE_TARGET would conflict. Bring $MERGE_TARGET into $CURRENT_BRANCH and resolve it there first."
+  [ "$MERGE_TRIAL_STATUS" -eq 0 ] || \
+    error "could not try the merge of $CURRENT_BRANCH into $MERGE_TARGET ('git merge-tree --write-tree' needs git 2.38 or newer)."
 fi
 
 # The release notes are the one thing this script cannot compute, so they are
