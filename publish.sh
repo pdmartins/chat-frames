@@ -106,6 +106,13 @@ if [[ "$REMOTE_URL" == *"$GITHUB_HOST"* ]]; then
   REMOTE_SLUG=$(echo "$REMOTE_URL" | sed -E 's#^git@[^:]+:##; s#^https?://[^/]+/##; s#\.git$##')
 fi
 
+# True when main already exists here, or on the remote (a fresh clone has only
+# the remote-tracking ref, and `git checkout main` creates the local one).
+release_branch_exists() {
+  git show-ref --verify --quiet "refs/heads/$RELEASE_BRANCH" ||
+    git show-ref --verify --quiet "refs/remotes/$REMOTE/$RELEASE_BRANCH"
+}
+
 # ─── release gates ────────────────────────────────────────────────────────────
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 [ "$CURRENT_BRANCH" = "$RELEASE_BRANCH" ] && \
@@ -187,6 +194,69 @@ info "Remote:      $REMOTE_URL"
 echo ""
 
 if $DRY_RUN; then
+  dry "bump version $CURRENT_VERSION → $NEW_VERSION in $PLUGIN_JSON_RELATIVE"
+  dry "move the '## Unreleased' notes of $CHANGELOG_RELATIVE under '## $NEW_VERSION — $RELEASE_DATE', empty '## Unreleased' on top"
+  dry "git commit -am 'release: v$NEW_VERSION' && git push $REMOTE $CURRENT_BRANCH"
+  if release_branch_exists; then
+    dry "git checkout $RELEASE_BRANCH && git merge --no-ff $CURRENT_BRANCH -m 'release: v$NEW_VERSION'"
+  else
+    dry "git checkout -b $RELEASE_BRANCH  (first release: $RELEASE_BRANCH starts at $CURRENT_BRANCH, so there is no merge commit)"
+  fi
+  dry "git push $REMOTE $RELEASE_BRANCH && git checkout $CURRENT_BRANCH"
   warn "Dry-run finished — nothing was executed."
   exit 0
 fi
+
+if ! $ASSUME_YES; then
+  printf "Merge %s into %s and push v%s? [y/N] " "$CURRENT_BRANCH" "$RELEASE_BRANCH" "$NEW_VERSION"
+  read -r reply
+  case "$reply" in [yY]*) ;; *) error "aborted." ;; esac
+fi
+
+# ─── bump, commit, merge, push ────────────────────────────────────────────────
+# Only the version value is replaced, so the rest of plugin.json keeps its layout.
+python3 - "$PLUGIN_JSON" "$CHANGELOG_MD" "$NEW_VERSION" "$RELEASE_DATE" <<'PYEOF'
+import io, re, sys
+
+plugin_json, changelog, version, date = sys.argv[1:5]
+
+with io.open(plugin_json, encoding="utf-8") as handle:
+    text = handle.read()
+text, bumped = re.subn(r'("version"\s*:\s*")[^"]*(")', r"\g<1>%s\g<2>" % version, text, count=1)
+if not bumped:
+    raise SystemExit("no \"version\" field found in " + plugin_json)
+with io.open(plugin_json, "w", encoding="utf-8") as handle:
+    handle.write(text)
+
+# `## Unreleased` keeps its place, now empty, and the notes that were under it
+# end up under the new heading. The gate above already refused an empty section.
+with io.open(changelog, encoding="utf-8") as handle:
+    text = handle.read()
+heading = "## Unreleased\n\n## %s \u2014 %s\n" % (version, date)
+text, renamed = re.subn(r"^## Unreleased[^\n]*\n", lambda _: heading, text, count=1, flags=re.M)
+if not renamed:
+    raise SystemExit("no '## Unreleased' heading found in " + changelog)
+with io.open(changelog, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PYEOF
+success "$PLUGIN_JSON_RELATIVE bumped to $NEW_VERSION, $CHANGELOG_RELATIVE section moved"
+
+claude plugin validate . --strict >/dev/null 2>&1 || \
+  error "the bumped plugin does not validate — nothing was committed or pushed. Undo with: git checkout -- $PLUGIN_JSON_RELATIVE $CHANGELOG_RELATIVE"
+
+git commit -q -am "release: v$NEW_VERSION"
+git push "$REMOTE" "$CURRENT_BRANCH"
+success "committed and pushed on $CURRENT_BRANCH"
+
+info "Merging $CURRENT_BRANCH → $RELEASE_BRANCH..."
+if release_branch_exists; then
+  git checkout "$RELEASE_BRANCH"
+  git merge --no-ff "$CURRENT_BRANCH" -m "release: v$NEW_VERSION"
+else
+  git checkout -b "$RELEASE_BRANCH"   # first release: main starts here
+fi
+git push "$REMOTE" "$RELEASE_BRANCH"
+# Tolerant on purpose: the release is public from the line above, so nothing
+# after it may abort the script. The EXIT trap is the backstop if this fails.
+git checkout "$CURRENT_BRANCH" || warn "could not return to $CURRENT_BRANCH"
+success "v$NEW_VERSION is on $RELEASE_BRANCH"
