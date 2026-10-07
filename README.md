@@ -14,7 +14,7 @@ By default prompts use a blue rule and replies a terracotta rule. The label can 
 | --- | --- | --- |
 | Date and time the row was added | yes | yes |
 | Model and effort, like `Opus 5.5 (high)` | no | yes |
-| Context tokens in use, and the change since the previous frame | yes | yes |
+| Context tokens in use, and the change since the previous prompt or reply | yes | yes |
 
 ## Install
 
@@ -71,7 +71,7 @@ This is the complete default. A file with exactly this content changes nothing.
 - `model`: the model name (assistant frames only). Off drops the effort too.
 - `effort`: the effort in parentheses after the model. Off drops the parentheses too.
 - `tokens`: the context tokens in use. Off drops the change next to it too.
-- `tokensDelta`: only the change in tokens since the previous frame, like `(+1.2k)`.
+- `tokensDelta`: only the change in tokens since the previous prompt or reply, like `(+1.2k)`; see [Tokens](#tokens).
 
 With every part off, or nothing to show, the top rule has no label.
 
@@ -146,8 +146,8 @@ terminal profile, or force `"theme": "dark"`.
 
 ## How it works
 
-These are the choices behind the frames, with the reason for each. The code is
-in `plugin/hooks/`.
+These are the choices behind the frames, and the reason where there is one. The
+code is in `plugin/hooks/`.
 
 ### What gets a frame
 
@@ -173,15 +173,17 @@ is built from the mark, so it keeps showing what was true when the row was
 added, also after a repaint.
 
 Marks live in the session's state and also in the plugin's store, so a resumed
-session keeps its labels. The store keeps at most 10 sessions and 1500 marks
-per session. Over a limit, the oldest session goes first (never the current
-one), and inside a session the oldest mark goes first. The limits are
-`MAX_SESSIONS` and `MAX_MARKS_PER_SESSION` in `plugin/hooks/marks.ts`.
+session keeps its labels. The plugin's store holds 4 MiB of JSON in all, so the
+limits keep the marks under that cap: 10 sessions of 1500 marks each come to
+about 2.2 MB. Over 10 sessions the oldest go first, but the current one is never
+dropped, so 11 can remain. Inside a session, past 1500 marks the oldest mark
+goes first. The limits are `MAX_SESSIONS` and `MAX_MARKS_PER_SESSION` in
+`plugin/hooks/marks.ts`.
 
-A reply block with no mark, like an API error row, still gets a frame. Its top
-rule has no label. A labeled rule is drawn over the blank first line Claude
-Code puts at the top of a reply. A row with no mark may not have that blank
-line, so its rule takes a line of its own.
+A reply block with no mark, like an API error row, still gets a frame, with no
+label. For a row with a mark, the top rule is drawn over the blank first line
+Claude Code puts at the top of a reply. A row with no mark may not have that
+blank line, so its rule takes a line of its own.
 
 ### Model and effort
 
@@ -195,14 +197,17 @@ not count. With no effort known, the effort shows as `--`.
 ### Tokens
 
 The tokens are Claude Code's count of the context in use
-(`$.session.usage().context.tokens`), read when the row is added. Claude Code
-counts the input of the last response it finished, so the number can lag the
-frame it sits on by one response.
+(`$.session.usage().context.tokens`), read when the row is added. Claude Code's
+count is the input side of the last response, so the number can lag the frame
+it sits on by one response.
 
 The change in parentheses is against the previous row that has a mark, prompt
-or reply (a row with no mark, like an API error row, is skipped). A change of
-zero is not shown. A row with no earlier count to compare with has no change.
-Before the first response there is no count, and the label has no tokens part.
+or reply. An API error row has no mark, so it is skipped. A reply block of only
+whitespace has a mark but no frame, so it can be the base. A change of zero is
+not shown. A row with no earlier count to compare with has no change.
+
+There is no count before the first response, nor right after a compaction until
+the next response. Then the label has no tokens part.
 
 ## Compatibility
 
