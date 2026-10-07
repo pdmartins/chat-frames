@@ -144,6 +144,66 @@ On a dark terminal with the `light` theme, the light palette puts the terminal's
 light text on light frames. That is hard to read (seen on screen). Use a light
 terminal profile, or force `"theme": "dark"`.
 
+## How it works
+
+These are the choices behind the frames, with the reason for each. The code is
+in `plugin/hooks/`.
+
+### What gets a frame
+
+- Each prompt you type gets a frame. A prompt that did not come from the input
+  box (its `origin.kind` is not `composer`) does not.
+- Each block of reply text gets a frame. A block that is empty or only
+  whitespace does not, and neither does the text `No response requested.`.
+- Everything else stays as Claude Code draws it: slash commands, tool calls and
+  their results, thinking, system rows. The plugin only handles prompt rows
+  (`UserMessage`) and reply text rows (`AssistantMessage`).
+
+### The prompt line
+
+Claude Code paints its own grey background behind a prompt, and that grey
+covers any background drawn around it. So the plugin draws the prompt line
+itself: `❯ ` and the text, on the frame's background.
+
+### Marks
+
+When a row is added, the plugin records a mark for it: the time and the context
+tokens at that moment, and for a reply also the model and the effort. The label
+is built from the mark, so it keeps showing what was true when the row was
+added, also after a repaint.
+
+Marks live in the session's state and also in the plugin's store, so a resumed
+session keeps its labels. The store keeps at most 10 sessions and 1500 marks
+per session. Over a limit, the oldest session goes first (never the current
+one), and inside a session the oldest mark goes first. The limits are
+`MAX_SESSIONS` and `MAX_MARKS_PER_SESSION` in `plugin/hooks/marks.ts`.
+
+A reply block with no mark, like an API error row, still gets a frame. Its top
+rule has no label. A labeled rule is drawn over the blank first line Claude
+Code puts at the top of a reply. A row with no mark may not have that blank
+line, so its rule takes a line of its own.
+
+### Model and effort
+
+The model name comes from the model id: `claude-opus-5-5` shows as `Opus 5.5`,
+and `claude-sonnet-4-5-20250929` as `Sonnet 4.5`. A date suffix and a suffix in
+brackets, like `[1m]`, are dropped. An id of any other shape shows as it is.
+
+The effort is the one of the last step of the main loop. Steps of subagents do
+not count. With no effort known, the effort shows as `--`.
+
+### Tokens
+
+The tokens are Claude Code's count of the context in use
+(`$.session.usage().context.tokens`), read when the row is added. Claude Code
+counts the input of the last response it finished, so the number can lag the
+frame it sits on by one response.
+
+The change in parentheses is against the previous row that has a mark, prompt
+or reply (a row with no mark, like an API error row, is skipped). A change of
+zero is not shown. A row with no earlier count to compare with has no change.
+Before the first response there is no count, and the label has no tokens part.
+
 ## Compatibility
 
 Built and tested on Claude Code 2.1.291. The plugin manifest has no
