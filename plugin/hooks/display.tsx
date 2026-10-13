@@ -32,11 +32,11 @@ export const FALLBACK_COLUMNS = 80
 
 // What the toast and the debug log say about the config file.
 export const FILE_FIELD = 'file'
-// Shape: `chat-frames: <field>: <reason>; <field>: <reason>. File: <path>`. The fields and
+// Shape: `<field>: <reason>; <field>: <reason>. File: <path>`. The fields and
 // reasons come first and the path last, so a narrow toast that cuts the end keeps the reasons.
 export const PROBLEM_SEPARATOR = '; '
 export const PROBLEM_TEMPLATE = (field: string, reason: string) => `${field}: ${reason}`
-export const WARNING_TEMPLATE = (problems: string, path: string) => `chat-frames: ${problems}. File: ${path}`
+export const WARNING_TEMPLATE = (problems: string, path: string) => `${problems}. File: ${path}`
 export const READ_LOG_TEMPLATE = (path: string) => `config: reading ${path}`
 export const MISSING_LOG_TEMPLATE = (path: string) => `config: ${path} does not exist, defaults in use`
 export const NO_PATH_LOG = 'config: the config directory is unknown (HOME and CLAUDE_CONFIG_DIR are unset), defaults in use'

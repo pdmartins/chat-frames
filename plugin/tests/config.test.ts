@@ -145,13 +145,13 @@ test('the warning lists each field with its short reason and ends with the file 
     { field: 'typo', reason: REASON_UNKNOWN_KEY },
     { field: 'show.date', reason: REASON_NOT_BOOLEAN },
   ])
-  expect(text).toBe(`chat-frames: typo: unknown key; show.date: must be true or false. File: ${CONFIG_PATH}`)
+  expect(text).toBe(`typo: unknown key; show.date: must be true or false. File: ${CONFIG_PATH}`)
 })
 
 test('the warning starts with the first problem field and ends with the path, so a cut keeps the reason', () => {
   const { problems } = parseConfig('{"show":{"date":"yes"},"typo":true}')
   const text = describeProblems(CONFIG_PATH, problems)
-  expect(text.startsWith(`chat-frames: ${problems[0]?.field}: `)).toBe(true)
+  expect(text.startsWith(`${problems[0]?.field}: `)).toBe(true)
   expect(text.endsWith(CONFIG_PATH)).toBe(true)
   expect(text.indexOf(problems[0]?.reason ?? '')).toBeLessThan(text.indexOf(CONFIG_PATH))
 })
@@ -200,7 +200,7 @@ test('a file that cannot be read gives every default and one toast with the reas
   const { io, toasts } = memoryIo({}, [CONFIG_PATH])
   expect(await loadConfig(CONFIG_PATH, io)).toEqual(SPEC_DEFAULTS)
   expect(toasts.length).toBe(1)
-  expect(toasts[0]).toBe(`chat-frames: file: could not be read (EACCES: permission denied). File: ${CONFIG_PATH}`)
+  expect(toasts[0]).toBe(`file: could not be read (EACCES: permission denied). File: ${CONFIG_PATH}`)
 })
 
 test('with no config path the defaults apply and the reason is logged', async () => {

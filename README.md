@@ -116,13 +116,14 @@ default. To hide a part, use `show`.
   `must be one of auto, light, dark`, `not valid JSON (<message>)`,
   `must be a JSON object` and `could not be read (<message>)`. A problem with
   the whole file is named `file`.
-- Either way you get one warning toast when the file is read. It lists each
-  field with its reason, then the path of the file at the end, so a narrow toast
-  that cuts the end still shows the reasons. The same text goes to the debug
-  log. For a file with an unknown key and a wrong type:
+- In every case above that gives a warning (all but the missing file), you get
+  one warning toast when the file is read. It lists each field with its reason,
+  then the path of the file at the end, so a narrow toast that cuts the end
+  still shows the reasons. The same text goes to the debug log. For a file with
+  an unknown key and a wrong type:
 
   ```
-  chat-frames: typo: unknown key; show.date: must be true or false. File: <config-dir>/plugins/data/chat-frames-pdmartins/config.json
+  typo: unknown key; show.date: must be true or false. File: <config-dir>/plugins/data/chat-frames-pdmartins/config.json
   ```
 
 - A missing file means the defaults, with no toast. The debug log notes that

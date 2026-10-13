@@ -8,7 +8,7 @@ Versions are MAJOR.MINOR.REVISION and change only on a release.
 ### Changed
 
 - The config warning lists each field with a short reason first and the file
-  path last, like `chat-frames: typo: unknown key. File: <path>`, so a narrow
+  path last, like `typo: unknown key. File: <path>`, so a narrow
   toast that cuts the end keeps the reason. The reason no longer says what
   applies instead; the README does.
 

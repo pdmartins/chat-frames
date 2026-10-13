@@ -66,7 +66,7 @@ test('a config file that hides the date draws no date on a framed prompt or repl
   })
   await $.session.start({ cwd: HOME, surface: null, isInteractive: false })
   expect(toasts.length).toBe(1)
-  expect(toasts[0]).toBe(`chat-frames: typo: unknown key. File: ${DEV_PATH}`)
+  expect(toasts[0]).toBe(`typo: unknown key. File: ${DEV_PATH}`)
 
   const userUi = await $.ui.mount({
     plugin: PLUGIN,
