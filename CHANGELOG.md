@@ -5,6 +5,18 @@ Versions are MAJOR.MINOR.REVISION and change only on a release.
 
 ## Unreleased
 
+### Changed
+
+- The config warning lists each field with a short reason first and the file
+  path last, like `chat-frames: typo: unknown key. File: <path>`, so a narrow
+  toast that cuts the end keeps the reason. The reason no longer says what
+  applies instead; the README does.
+
+### Fixed
+
+- The 0.3.0 note about the token change said "since the previous frame". The
+  change is since the previous prompt or reply.
+
 ## 0.3.0 — 2026-10-06
 
 ### Added

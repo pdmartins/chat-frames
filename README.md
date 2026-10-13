@@ -93,20 +93,38 @@ text stays as you wrote it.
 `icons` are the symbols before the stamp, the model and the tokens.
 
 `colors` hold one set per palette, `dark` and `light`. Each has the rule color
-and the background of user frames and of assistant frames. A rule color is a
-Claude Code theme color key (`claude`, `blue`) or a hex value. The plugin does
-not check the color you write.
+and the background of user frames and of assistant frames. A rule color and a
+background color take the same kinds of value: a Claude Code theme color key
+(`claude`, `success`), a color name (`blue`, `red`) or a hex value (`#0f1b33`).
+A theme key follows the Claude Code theme. The plugin does not check the color
+you write, and what is drawn for a value Claude Code does not know is up to
+Claude Code.
 
 Icons, formats and colors do not accept empty text. An empty one keeps the
 default. To hide a part, use `show`.
 
 ### Problems in the file
 
-- A field with the wrong type, a value that is not allowed, or an unknown key
-  keeps the default for that field.
-- A file that is not valid JSON, or not a JSON object, keeps the whole default.
-- Either way you get one warning toast when the file is read. It names the file,
-  each field and the reason. The same text goes to the debug log.
+- A field with the wrong type or a value that is not allowed keeps the default
+  for that field.
+- An unknown key is ignored.
+- A file that is not valid JSON, is not a JSON object, or cannot be read keeps
+  the whole default.
+- A field with a problem is named in the warning with a short reason, and what
+  applies instead is what this list says. The reasons are `unknown key`,
+  `must be an object`, `must be true or false`, `must be a non-empty string`,
+  `must be one of auto, light, dark`, `not valid JSON (<message>)`,
+  `must be a JSON object` and `could not be read (<message>)`. A problem with
+  the whole file is named `file`.
+- Either way you get one warning toast when the file is read. It lists each
+  field with its reason, then the path of the file at the end, so a narrow toast
+  that cuts the end still shows the reasons. The same text goes to the debug
+  log. For a file with an unknown key and a wrong type:
+
+  ```
+  chat-frames: typo: unknown key; show.date: must be true or false. File: <config-dir>/plugins/data/chat-frames-pdmartins/config.json
+  ```
+
 - A missing file means the defaults, with no toast. The debug log notes that
   the defaults are in use.
 
@@ -228,9 +246,10 @@ claude plugin test plugin
 tsc -p plugin
 ```
 
-`tsc -p plugin` needs the types Claude Code generates in
-`plugin/.claude-plugin/types/`. Load the plugin once as a dev mod, or with
-`--plugin-dir plugin`, to generate them.
+`tsc -p plugin` needs what Claude Code generates when it loads the plugin: the
+types in `plugin/.claude-plugin/types/` and `plugin/tsconfig.json`. Both are
+gitignored, so a fresh clone has neither. Load the plugin once as a dev mod, or
+with `--plugin-dir plugin`, to generate them.
 
 A plugin loaded from a folder has no marketplace, so it reads its config from
 `<config-dir>/plugins/data/chat-frames-inline/config.json`.
