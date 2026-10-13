@@ -5,6 +5,8 @@ Versions are MAJOR.MINOR.REVISION and change only on a release.
 
 ## Unreleased
 
+## 0.3.1 — 2026-10-13
+
 ### Changed
 
 - The config warning lists each field with a short reason first and the file
