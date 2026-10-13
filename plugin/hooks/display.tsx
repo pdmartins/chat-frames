@@ -32,20 +32,23 @@ export const FALLBACK_COLUMNS = 80
 
 // What the toast and the debug log say about the config file.
 export const FILE_FIELD = 'file'
-export const TOAST_PREFIX = 'chat-frames: config problems in'
+// Shape: `<field>: <reason>; <field>: <reason>. File: <path>`. The fields and
+// reasons come first and the path last, so a narrow toast that cuts the end keeps the reasons.
 export const PROBLEM_SEPARATOR = '; '
+export const PROBLEM_TEMPLATE = (field: string, reason: string) => `${field}: ${reason}`
+export const WARNING_TEMPLATE = (problems: string, path: string) => `${problems}. File: ${path}`
 export const READ_LOG_TEMPLATE = (path: string) => `config: reading ${path}`
 export const MISSING_LOG_TEMPLATE = (path: string) => `config: ${path} does not exist, defaults in use`
 export const NO_PATH_LOG = 'config: the config directory is unknown (HOME and CLAUDE_CONFIG_DIR are unset), defaults in use'
-export const REASON_NOT_JSON = (message: string) => `not valid JSON (${message}), all defaults in use`
-export const REASON_NOT_OBJECT = 'must be a JSON object, all defaults in use'
-export const REASON_READ_FAILED = (message: string) => `could not be read (${message}), all defaults in use`
-export const REASON_UNKNOWN_KEY = 'unknown key, ignored'
-export const REASON_NOT_OBJECT_FIELD = 'must be an object, default in use'
-export const REASON_NOT_BOOLEAN = 'must be true or false, default in use'
-export const REASON_NOT_TEXT = 'must be a non-empty string, default in use'
+export const REASON_NOT_JSON = (message: string) => `not valid JSON (${message})`
+export const REASON_NOT_OBJECT = 'must be a JSON object'
+export const REASON_READ_FAILED = (message: string) => `could not be read (${message})`
+export const REASON_UNKNOWN_KEY = 'unknown key'
+export const REASON_NOT_OBJECT_FIELD = 'must be an object'
+export const REASON_NOT_BOOLEAN = 'must be true or false'
+export const REASON_NOT_TEXT = 'must be a non-empty string'
 export const THEME_READ_FAILED_LOG = (message: string) => `theme: Claude Code's theme could not be read (${message}), the dark palette is in use`
-export const REASON_NOT_ALLOWED = (allowed: readonly string[]) => `must be one of ${allowed.join(', ')}, default in use`
+export const REASON_NOT_ALLOWED = (allowed: readonly string[]) => `must be one of ${allowed.join(', ')}`
 
 const NO_EFFORT_TEXT = '--' // shown when no effort is known
 const DATE_TIME_SEPARATOR = ' '

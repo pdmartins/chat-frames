@@ -4,6 +4,7 @@ import {
   MISSING_LOG_TEMPLATE,
   NO_PATH_LOG,
   PROBLEM_SEPARATOR,
+  PROBLEM_TEMPLATE,
   READ_LOG_TEMPLATE,
   REASON_NOT_BOOLEAN,
   REASON_NOT_ALLOWED,
@@ -14,7 +15,7 @@ import {
   REASON_READ_FAILED,
   REASON_UNKNOWN_KEY,
   THEME_READ_FAILED_LOG,
-  TOAST_PREFIX,
+  WARNING_TEMPLATE,
 } from './display'
 import type { ChatFramesConfig, ChatFramesPalette } from '../types'
 
@@ -148,7 +149,7 @@ export const parseConfig = (text: string): ParsedConfig => {
 }
 
 export const describeProblems = (path: string, problems: ConfigProblem[]): string =>
-  `${TOAST_PREFIX} ${path}: ${problems.map(({ field, reason }) => `${field} ${reason}`).join(PROBLEM_SEPARATOR)}`
+  WARNING_TEMPLATE(problems.map(({ field, reason }) => PROBLEM_TEMPLATE(field, reason)).join(PROBLEM_SEPARATOR), path)
 
 // One read of the file: the path is logged, a missing file gives the defaults without
 // a word, any problem is reported once (toast and debug log) and the valid part is kept.

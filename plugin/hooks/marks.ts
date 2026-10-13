@@ -92,14 +92,17 @@ export const withMark = (
   return Object.fromEntries(entries.slice(-max))
 }
 
-// The newest entry holding a context figure: the baseline for the next change.
+// The last entry's context figure: the baseline for the next change. Only the
+// last entry counts, so when it has no figure there is no baseline, even if an
+// older entry has one.
 export const newestContextTokens = (marks: ChatFramesSessionMarks): number | undefined => {
   const newest = Object.values(marks).at(-1)
   return newest?.contextTokens ?? undefined
 }
 
-// The mark keys to delete so that at most `keep` remain, oldest first (the store
-// lists keys in insertion order); the current session's key is never among them.
+// The mark keys to delete so that `keep` remain, oldest first (the store lists
+// keys in insertion order). The current session's key is never deleted, so
+// `keep + 1` remain when it is among the oldest.
 export const staleSessionKeys = (keys: readonly string[], keep: number, currentKey: string): string[] => {
   const sessionKeys = keys.filter(key => key.startsWith(SESSION_KEY_PREFIX))
   const excess = Math.max(0, sessionKeys.length - keep)

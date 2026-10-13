@@ -7,7 +7,10 @@ import {
   DEFAULT_CONFIG,
   REASON_NOT_ALLOWED,
   REASON_NOT_BOOLEAN,
+  REASON_NOT_JSON,
+  REASON_NOT_OBJECT,
   REASON_NOT_OBJECT_FIELD,
+  REASON_READ_FAILED,
   REASON_NOT_TEXT,
   REASON_UNKNOWN_KEY,
 } from '../hooks/display'
@@ -137,14 +140,36 @@ test('an unknown key is ignored and reported, at any depth, while the valid fiel
   expect(config).toEqual({ ...SPEC_DEFAULTS, theme: 'dark' })
 })
 
-test('the problems are listed with the file path, each field and its reason', () => {
+test('the warning lists each field with its short reason and ends with the file path', () => {
   const text = describeProblems(CONFIG_PATH, [
-    { field: 'theme', reason: 'bad' },
-    { field: 'show.date', reason: 'worse' },
+    { field: 'typo', reason: REASON_UNKNOWN_KEY },
+    { field: 'show.date', reason: REASON_NOT_BOOLEAN },
   ])
-  expect(text).toContain(CONFIG_PATH)
-  expect(text).toContain('theme bad')
-  expect(text).toContain('show.date worse')
+  expect(text).toBe(`typo: unknown key; show.date: must be true or false. File: ${CONFIG_PATH}`)
+})
+
+test('the warning starts with the first problem field and ends with the path, so a cut keeps the reason', () => {
+  const { problems } = parseConfig('{"show":{"date":"yes"},"typo":true}')
+  const text = describeProblems(CONFIG_PATH, problems)
+  expect(text.startsWith(`${problems[0]?.field}: `)).toBe(true)
+  expect(text.endsWith(CONFIG_PATH)).toBe(true)
+  expect(text.indexOf(problems[0]?.reason ?? '')).toBeLessThan(text.indexOf(CONFIG_PATH))
+})
+
+test('no reason says what applies instead', () => {
+  const reasons = [
+    REASON_UNKNOWN_KEY,
+    REASON_NOT_OBJECT_FIELD,
+    REASON_NOT_BOOLEAN,
+    REASON_NOT_TEXT,
+    REASON_NOT_ALLOWED(['auto', 'light', 'dark']),
+    REASON_NOT_JSON('x'),
+    REASON_NOT_OBJECT,
+    REASON_READ_FAILED('x'),
+  ]
+  for (const reason of reasons) {
+    expect(reason).not.toMatch(/default|ignored/)
+  }
 })
 
 test('a missing file gives the defaults with no toast, and the path is logged', async () => {
@@ -175,7 +200,7 @@ test('a file that cannot be read gives every default and one toast with the reas
   const { io, toasts } = memoryIo({}, [CONFIG_PATH])
   expect(await loadConfig(CONFIG_PATH, io)).toEqual(SPEC_DEFAULTS)
   expect(toasts.length).toBe(1)
-  expect(toasts[0]).toContain('EACCES')
+  expect(toasts[0]).toBe(`file: could not be read (EACCES: permission denied). File: ${CONFIG_PATH}`)
 })
 
 test('with no config path the defaults apply and the reason is logged', async () => {
